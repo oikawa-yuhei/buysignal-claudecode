@@ -46,6 +46,10 @@ def toggle_source(source_id, is_active):
     client.table("sources").update({"is_active": is_active}).eq("id", source_id).execute()
 
 
+def delete_source(source_id):
+    client.table("sources").delete().eq("id", source_id).execute()
+
+
 def add_source(name, rss_url, category_id):
     client.table("sources").insert(
         {"name": name, "rss_url": rss_url, "category_id": category_id, "is_active": True}
@@ -99,21 +103,47 @@ with settings_tab:
     st.subheader("巡回先一覧")
     sources = load_sources()
     for src in sources:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown(f"**{src['name']}**")
-            st.caption(src["rss_url"])
-        with col2:
-            is_active = st.toggle(
-                "ON/OFF",
-                value=src["is_active"],
-                key=f"source_toggle_{src['id']}",
-                label_visibility="collapsed",
-            )
-            if is_active != src["is_active"]:
-                toggle_source(src["id"], is_active)
-                st.cache_data.clear()
-                st.rerun()
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.markdown(f"**{src['name']}**")
+                st.caption(src["rss_url"])
+            with col2:
+                is_active = st.toggle(
+                    "ON/OFF",
+                    value=src["is_active"],
+                    key=f"source_toggle_{src['id']}",
+                    label_visibility="collapsed",
+                )
+                if is_active != src["is_active"]:
+                    toggle_source(src["id"], is_active)
+                    st.cache_data.clear()
+                    st.rerun()
+            with col3:
+                if st.button("🗑️", key=f"delete_btn_{src['id']}", use_container_width=True):
+                    st.session_state[f"confirm_delete_{src['id']}"] = True
+
+            if st.session_state.get(f"confirm_delete_{src['id']}"):
+                st.warning(f"「{src['name']}」を削除しますか？この操作は取り消せません。")
+                confirm_col1, confirm_col2 = st.columns(2)
+                with confirm_col1:
+                    if st.button(
+                        "はい、削除する",
+                        key=f"confirm_delete_yes_{src['id']}",
+                        use_container_width=True,
+                    ):
+                        delete_source(src["id"])
+                        del st.session_state[f"confirm_delete_{src['id']}"]
+                        st.cache_data.clear()
+                        st.rerun()
+                with confirm_col2:
+                    if st.button(
+                        "キャンセル",
+                        key=f"confirm_delete_no_{src['id']}",
+                        use_container_width=True,
+                    ):
+                        del st.session_state[f"confirm_delete_{src['id']}"]
+                        st.rerun()
 
     st.divider()
     st.subheader("新規巡回先の追加")

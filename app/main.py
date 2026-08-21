@@ -30,6 +30,16 @@ def load_sources():
     return client.table("sources").select("*").order("id").execute().data or []
 
 
+@st.cache_data(ttl=15)
+def load_products():
+    return client.table("products").select("*").order("created_at", desc=True).execute().data or []
+
+
+@st.cache_data(ttl=15)
+def load_blacklist():
+    return client.table("blacklist").select("*").order("created_at", desc=True).execute().data or []
+
+
 def approve_keyword(row, category_id):
     client.table("products").insert(
         {"name": row["keyword"], "regex_pattern": row["keyword"], "category_id": category_id}
@@ -66,6 +76,14 @@ def delete_category(category_id):
     client.table("categories").delete().eq("id", category_id).execute()
 
 
+def delete_product(product_id):
+    client.table("products").delete().eq("id", product_id).execute()
+
+
+def delete_blacklist_entry(blacklist_id):
+    client.table("blacklist").delete().eq("id", blacklist_id).execute()
+
+
 st.markdown(
     """
     <style>
@@ -78,7 +96,9 @@ st.markdown(
 
 st.title("🛒 ポチポチツール")
 
-main_tab, settings_tab, category_tab = st.tabs(["承認キュー", "巡回先管理", "カテゴリ管理"])
+main_tab, history_tab, settings_tab, category_tab = st.tabs(
+    ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理"]
+)
 
 categories = load_categories()
 category_labels = ["すべて"] + [f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories]
@@ -107,6 +127,84 @@ with main_tab:
                         if st.button("❌ 却下", key=f"reject_{row['id']}", use_container_width=True):
                             reject_keyword(row)
                             st.cache_data.clear()
+                            st.rerun()
+
+with history_tab:
+    approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])
+
+    with approved_tab:
+        products = load_products()
+        if not products:
+            st.info("承認済みの商品はありません")
+        for product in products:
+            with st.container(border=True):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"**{product['name']}**")
+                    st.caption(product["regex_pattern"])
+                with col2:
+                    if st.button(
+                        "🗑️", key=f"delete_product_btn_{product['id']}", use_container_width=True
+                    ):
+                        st.session_state[f"confirm_delete_product_{product['id']}"] = True
+
+                if st.session_state.get(f"confirm_delete_product_{product['id']}"):
+                    st.warning(f"「{product['name']}」の承認を取り消しますか？")
+                    confirm_col1, confirm_col2 = st.columns(2)
+                    with confirm_col1:
+                        if st.button(
+                            "はい、取り消す",
+                            key=f"confirm_delete_product_yes_{product['id']}",
+                            use_container_width=True,
+                        ):
+                            delete_product(product["id"])
+                            del st.session_state[f"confirm_delete_product_{product['id']}"]
+                            st.cache_data.clear()
+                            st.rerun()
+                    with confirm_col2:
+                        if st.button(
+                            "キャンセル",
+                            key=f"confirm_delete_product_no_{product['id']}",
+                            use_container_width=True,
+                        ):
+                            del st.session_state[f"confirm_delete_product_{product['id']}"]
+                            st.rerun()
+
+    with rejected_tab:
+        blacklist_entries = load_blacklist()
+        if not blacklist_entries:
+            st.info("却下済みのワードはありません")
+        for entry in blacklist_entries:
+            with st.container(border=True):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"**{entry['keyword']}**")
+                with col2:
+                    if st.button(
+                        "🗑️", key=f"delete_blacklist_btn_{entry['id']}", use_container_width=True
+                    ):
+                        st.session_state[f"confirm_delete_blacklist_{entry['id']}"] = True
+
+                if st.session_state.get(f"confirm_delete_blacklist_{entry['id']}"):
+                    st.warning(f"「{entry['keyword']}」の却下を取り消しますか？")
+                    confirm_col1, confirm_col2 = st.columns(2)
+                    with confirm_col1:
+                        if st.button(
+                            "はい、取り消す",
+                            key=f"confirm_delete_blacklist_yes_{entry['id']}",
+                            use_container_width=True,
+                        ):
+                            delete_blacklist_entry(entry["id"])
+                            del st.session_state[f"confirm_delete_blacklist_{entry['id']}"]
+                            st.cache_data.clear()
+                            st.rerun()
+                    with confirm_col2:
+                        if st.button(
+                            "キャンセル",
+                            key=f"confirm_delete_blacklist_no_{entry['id']}",
+                            use_container_width=True,
+                        ):
+                            del st.session_state[f"confirm_delete_blacklist_{entry['id']}"]
                             st.rerun()
 
 with settings_tab:

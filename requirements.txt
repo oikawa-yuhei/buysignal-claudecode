@@ -1,0 +1,6 @@
+supabase
+feedparser
+pandas
+numpy
+python-dotenv
+streamlit

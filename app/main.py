@@ -31,8 +31,11 @@ def load_sources():
 
 
 @st.cache_data(ttl=15)
-def load_products():
-    return client.table("products").select("*").order("created_at", desc=True).execute().data or []
+def load_products(category_id):
+    query = client.table("products").select("*").order("created_at", desc=True)
+    if category_id is not None:
+        query = query.eq("category_id", category_id)
+    return query.execute().data or []
 
 
 @st.cache_data(ttl=15)
@@ -133,42 +136,47 @@ with history_tab:
     approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])
 
     with approved_tab:
-        products = load_products()
-        if not products:
-            st.info("承認済みの商品はありません")
-        for product in products:
-            with st.container(border=True):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.markdown(f"**{product['name']}**")
-                    st.caption(product["regex_pattern"])
-                with col2:
-                    if st.button(
-                        "🗑️", key=f"delete_product_btn_{product['id']}", use_container_width=True
-                    ):
-                        st.session_state[f"confirm_delete_product_{product['id']}"] = True
+        approved_category_tabs = st.tabs(category_labels)
+        for tab, category_id in zip(approved_category_tabs, category_ids):
+            with tab:
+                products = load_products(category_id)
+                if not products:
+                    st.info("承認済みの商品はありません")
+                for product in products:
+                    with st.container(border=True):
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.markdown(f"**{product['name']}**")
+                            st.caption(product["regex_pattern"])
+                        with col2:
+                            if st.button(
+                                "🗑️",
+                                key=f"delete_product_btn_{product['id']}",
+                                use_container_width=True,
+                            ):
+                                st.session_state[f"confirm_delete_product_{product['id']}"] = True
 
-                if st.session_state.get(f"confirm_delete_product_{product['id']}"):
-                    st.warning(f"「{product['name']}」の承認を取り消しますか？")
-                    confirm_col1, confirm_col2 = st.columns(2)
-                    with confirm_col1:
-                        if st.button(
-                            "はい、取り消す",
-                            key=f"confirm_delete_product_yes_{product['id']}",
-                            use_container_width=True,
-                        ):
-                            delete_product(product["id"])
-                            del st.session_state[f"confirm_delete_product_{product['id']}"]
-                            st.cache_data.clear()
-                            st.rerun()
-                    with confirm_col2:
-                        if st.button(
-                            "キャンセル",
-                            key=f"confirm_delete_product_no_{product['id']}",
-                            use_container_width=True,
-                        ):
-                            del st.session_state[f"confirm_delete_product_{product['id']}"]
-                            st.rerun()
+                        if st.session_state.get(f"confirm_delete_product_{product['id']}"):
+                            st.warning(f"「{product['name']}」の承認を取り消しますか？")
+                            confirm_col1, confirm_col2 = st.columns(2)
+                            with confirm_col1:
+                                if st.button(
+                                    "はい、取り消す",
+                                    key=f"confirm_delete_product_yes_{product['id']}",
+                                    use_container_width=True,
+                                ):
+                                    delete_product(product["id"])
+                                    del st.session_state[f"confirm_delete_product_{product['id']}"]
+                                    st.cache_data.clear()
+                                    st.rerun()
+                            with confirm_col2:
+                                if st.button(
+                                    "キャンセル",
+                                    key=f"confirm_delete_product_no_{product['id']}",
+                                    use_container_width=True,
+                                ):
+                                    del st.session_state[f"confirm_delete_product_{product['id']}"]
+                                    st.rerun()
 
     with rejected_tab:
         blacklist_entries = load_blacklist()

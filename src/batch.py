@@ -1,5 +1,6 @@
 import re
 import sys
+import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -11,6 +12,10 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from src.config import get_client
 
 UNREGISTERED_PATTERN = re.compile(r"[ァ-ヶー]{2,}\d{1,4}|[A-Za-z]{2,}\d{1,4}")
+
+
+def normalize_text(text):
+    return unicodedata.normalize("NFKC", text)
 
 
 def fetch_active_sources(client):
@@ -30,14 +35,14 @@ def collect_texts(sources):
         for entry in feed.entries:
             title = entry.get("title", "")
             summary = entry.get("summary", "")
-            texts.append(f"{title} {summary}")
+            texts.append(normalize_text(f"{title} {summary}"))
     return texts
 
 
 def count_product_mentions(texts, products):
     counts = defaultdict(int)
     for product in products:
-        pattern = re.compile(product["regex_pattern"])
+        pattern = re.compile(product["regex_pattern"], re.IGNORECASE)
         for text in texts:
             counts[product["id"]] += len(pattern.findall(text))
     return counts
@@ -68,13 +73,13 @@ def upsert_daily_buzz(client, counts):
 
 
 def extract_unregistered_keywords(texts, products, blacklist):
-    registered_patterns = [re.compile(p["regex_pattern"]) for p in products]
-    blacklist_set = set(blacklist)
+    registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
+    blacklist_set = {normalize_text(word).upper() for word in blacklist}
 
     found = {}
     for text in texts:
         for match in UNREGISTERED_PATTERN.finditer(text):
-            keyword = match.group()
+            keyword = match.group().upper()
             if keyword in blacklist_set:
                 continue
             if any(p.search(keyword) for p in registered_patterns):

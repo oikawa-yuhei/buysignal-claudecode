@@ -114,7 +114,7 @@ st.markdown(
 
 st.markdown(
     """
-    <div style="text-align:center; margin-bottom: 1.2rem; line-height: 1.1;">
+    <div style="text-align:left; margin-bottom: 1.2rem; line-height: 1.1;">
         <span style="font-size: clamp(1.6rem, 8vw, 2.2rem); vertical-align: middle;">⚡</span>
         <span style="
             font-size: clamp(1.6rem, 8vw, 2.2rem);

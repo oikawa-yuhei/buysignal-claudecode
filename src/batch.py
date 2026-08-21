@@ -18,6 +18,11 @@ def fetch_active_sources(client):
     return res.data or []
 
 
+def fetch_source_by_id(client, source_id):
+    res = client.table("sources").select("id, rss_url").eq("id", source_id).execute()
+    return res.data or []
+
+
 def collect_texts(sources):
     texts = []
     for src in sources:
@@ -120,10 +125,10 @@ def upsert_unregistered_keywords(client, keyword_contexts, categories):
             ).execute()
 
 
-def run():
+def run(source_id=None):
     client = get_client()
 
-    sources = fetch_active_sources(client)
+    sources = fetch_source_by_id(client, source_id) if source_id is not None else fetch_active_sources(client)
     products = client.table("products").select("id, regex_pattern").execute().data or []
     categories = client.table("categories").select("id, seed_keywords").execute().data or []
     blacklist = [

@@ -230,7 +230,7 @@ with settings_tab:
     sources = load_sources()
     for src in sources:
         with st.container(border=True):
-            col1, col2, col3 = st.columns([3, 1, 1])
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
             with col1:
                 st.markdown(f"**{src['name']}**")
                 st.caption(src["rss_url"])
@@ -246,6 +246,13 @@ with settings_tab:
                     st.cache_data.clear()
                     st.rerun()
             with col3:
+                if st.button("▶", key=f"run_source_btn_{src['id']}", use_container_width=True):
+                    with st.spinner(f"「{src['name']}」を巡回中..."):
+                        run_batch(source_id=src["id"])
+                    st.cache_data.clear()
+                    st.success("巡回が完了しました")
+                    st.rerun()
+            with col4:
                 if st.button("🗑️", key=f"delete_btn_{src['id']}", use_container_width=True):
                     st.session_state[f"confirm_delete_{src['id']}"] = True
 

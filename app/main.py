@@ -51,6 +51,10 @@ def load_blacklist():
     return client.table("blacklist").select("*").order("created_at", desc=True).execute().data or []
 
 
+def product_exists(name):
+    return bool(client.table("products").select("id").eq("name", name).execute().data)
+
+
 def approve_keyword(row, category_id):
     client.table("products").insert(
         {"name": row["keyword"], "regex_pattern": row["keyword"], "category_id": category_id}
@@ -173,7 +177,11 @@ with main_tab:
             )
             submitted_product = st.form_submit_button("追加", use_container_width=True)
             if submitted_product:
-                if new_product_name:
+                if not new_product_name:
+                    st.warning("ワードを入力してください")
+                elif product_exists(new_product_name):
+                    st.warning(f"「{new_product_name}」はすでに登録されています")
+                else:
                     add_product(
                         new_product_name,
                         new_product_name,
@@ -182,8 +190,6 @@ with main_tab:
                     st.cache_data.clear()
                     st.success("追加しました")
                     st.rerun()
-                else:
-                    st.warning("ワードを入力してください")
 
     category_tabs = st.tabs(category_labels)
     for tab, category_id in zip(category_tabs, category_ids):
@@ -203,10 +209,22 @@ with main_tab:
                             key=f"approve_{category_id}_{row['id']}",
                             use_container_width=True,
                         ):
-                            target_category_id = row.get("predicted_category_id") or category_id
-                            approve_keyword(row, target_category_id)
-                            st.cache_data.clear()
-                            st.rerun()
+                            if product_exists(row["keyword"]):
+                                client.table("unregistered_keywords").delete().eq(
+                                    "id", row["id"]
+                                ).execute()
+                                st.cache_data.clear()
+                                st.warning(
+                                    f"「{row['keyword']}」はすでに承認済みでした。キューから削除しました。"
+                                )
+                                st.rerun()
+                            else:
+                                target_category_id = (
+                                    row.get("predicted_category_id") or category_id
+                                )
+                                approve_keyword(row, target_category_id)
+                                st.cache_data.clear()
+                                st.rerun()
                     with col2:
                         if st.button(
                             "❌ 却下",

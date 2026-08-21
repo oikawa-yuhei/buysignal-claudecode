@@ -22,7 +22,7 @@ create index if not exists idx_sources_is_active on sources(is_active);
 
 create table if not exists products (
   id bigint generated always as identity primary key,
-  name text not null,
+  name text not null unique,
   regex_pattern text not null,
   category_id bigint references categories(id) on delete set null,
   created_at timestamptz not null default now()

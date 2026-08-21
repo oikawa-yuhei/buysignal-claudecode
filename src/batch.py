@@ -11,11 +11,23 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.config import get_client
 
-UNREGISTERED_PATTERN = re.compile(r"[ァ-ヶー]{2,}\d{1,4}|[A-Za-z]{2,}\d{1,4}")
+UNREGISTERED_PATTERN = re.compile(r"[ァ-ヶー]{2,}\s?\d{1,4}|[A-Za-z]{2,}\s?\d{1,4}")
 
 
 def normalize_text(text):
     return unicodedata.normalize("NFKC", text)
+
+
+def canonicalize_keyword(raw_keyword):
+    return re.sub(r"\s+", "", raw_keyword).upper()
+
+
+def build_regex_pattern(keyword):
+    match = re.match(r"^(\D+)(\d+)$", keyword)
+    if match:
+        prefix, digits = match.groups()
+        return re.escape(prefix) + r"\s*" + re.escape(digits)
+    return re.escape(keyword)
 
 
 def fetch_active_sources(client):
@@ -74,12 +86,12 @@ def upsert_daily_buzz(client, counts):
 
 def extract_unregistered_keywords(texts, products, blacklist):
     registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
-    blacklist_set = {normalize_text(word).upper() for word in blacklist}
+    blacklist_set = {canonicalize_keyword(normalize_text(word)) for word in blacklist}
 
     found = {}
     for text in texts:
         for match in UNREGISTERED_PATTERN.finditer(text):
-            keyword = match.group().upper()
+            keyword = canonicalize_keyword(match.group())
             if keyword in blacklist_set:
                 continue
             if any(p.search(keyword) for p in registered_patterns):

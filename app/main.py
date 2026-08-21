@@ -5,6 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 
+from src.batch import build_regex_pattern, canonicalize_keyword
 from src.batch import run as run_batch
 from src.config import get_client
 
@@ -57,7 +58,11 @@ def product_exists(name):
 
 def approve_keyword(row, category_id):
     client.table("products").insert(
-        {"name": row["keyword"], "regex_pattern": row["keyword"], "category_id": category_id}
+        {
+            "name": row["keyword"],
+            "regex_pattern": build_regex_pattern(row["keyword"]),
+            "category_id": category_id,
+        }
     ).execute()
     client.table("unregistered_keywords").delete().eq("id", row["id"]).execute()
 
@@ -179,17 +184,19 @@ with main_tab:
             if submitted_product:
                 if not new_product_name:
                     st.warning("ワードを入力してください")
-                elif product_exists(new_product_name):
-                    st.warning(f"「{new_product_name}」はすでに登録されています")
                 else:
-                    add_product(
-                        new_product_name,
-                        new_product_name,
-                        product_category_options.get(product_category_name),
-                    )
-                    st.cache_data.clear()
-                    st.success("追加しました")
-                    st.rerun()
+                    canonical_name = canonicalize_keyword(new_product_name)
+                    if product_exists(canonical_name):
+                        st.warning(f"「{canonical_name}」はすでに登録されています")
+                    else:
+                        add_product(
+                            canonical_name,
+                            build_regex_pattern(canonical_name),
+                            product_category_options.get(product_category_name),
+                        )
+                        st.cache_data.clear()
+                        st.success("追加しました")
+                        st.rerun()
 
     category_tabs = st.tabs(category_labels)
     for tab, category_id in zip(category_tabs, category_ids):

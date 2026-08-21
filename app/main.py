@@ -5,6 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 
+from src.batch import run as run_batch
 from src.config import get_client
 
 st.set_page_config(page_title="ポチポチツール", page_icon="🛒", layout="centered")
@@ -108,6 +109,13 @@ category_labels = ["すべて"] + [f'{c.get("icon") or "🏷️"} {c["name"]}' f
 category_ids = [None] + [c["id"] for c in categories]
 
 with main_tab:
+    if st.button("🔄 今すぐ巡回実行", use_container_width=True):
+        with st.spinner("巡回中..."):
+            run_batch()
+        st.cache_data.clear()
+        st.success("巡回が完了しました")
+        st.rerun()
+
     category_tabs = st.tabs(category_labels)
     for tab, category_id in zip(category_tabs, category_ids):
         with tab:

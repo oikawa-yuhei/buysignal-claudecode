@@ -56,6 +56,16 @@ def add_source(name, rss_url, category_id):
     ).execute()
 
 
+def add_category(name, seed_keywords, icon):
+    client.table("categories").insert(
+        {"name": name, "seed_keywords": seed_keywords, "icon": icon}
+    ).execute()
+
+
+def delete_category(category_id):
+    client.table("categories").delete().eq("id", category_id).execute()
+
+
 st.markdown(
     """
     <style>
@@ -68,7 +78,7 @@ st.markdown(
 
 st.title("🛒 ポチポチツール")
 
-main_tab, settings_tab = st.tabs(["承認キュー", "巡回先管理"])
+main_tab, settings_tab, category_tab = st.tabs(["承認キュー", "巡回先管理", "カテゴリ管理"])
 
 categories = load_categories()
 category_labels = ["すべて"] + [f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories]
@@ -163,3 +173,58 @@ with settings_tab:
                 st.rerun()
             else:
                 st.warning("サイト名とURLを入力してください")
+
+with category_tab:
+    st.subheader("カテゴリ一覧")
+    for cat in categories:
+        with st.container(border=True):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**{cat.get('icon') or '🏷️'} {cat['name']}**")
+                seed_keywords = cat.get("seed_keywords") or []
+                if seed_keywords:
+                    st.caption(", ".join(seed_keywords))
+            with col2:
+                if st.button("🗑️", key=f"delete_cat_btn_{cat['id']}", use_container_width=True):
+                    st.session_state[f"confirm_delete_cat_{cat['id']}"] = True
+
+            if st.session_state.get(f"confirm_delete_cat_{cat['id']}"):
+                st.warning(
+                    f"「{cat['name']}」を削除しますか？紐づく巡回先/商品/未登録ワードのカテゴリは未分類になります。"
+                )
+                confirm_col1, confirm_col2 = st.columns(2)
+                with confirm_col1:
+                    if st.button(
+                        "はい、削除する",
+                        key=f"confirm_delete_cat_yes_{cat['id']}",
+                        use_container_width=True,
+                    ):
+                        delete_category(cat["id"])
+                        del st.session_state[f"confirm_delete_cat_{cat['id']}"]
+                        st.cache_data.clear()
+                        st.rerun()
+                with confirm_col2:
+                    if st.button(
+                        "キャンセル",
+                        key=f"confirm_delete_cat_no_{cat['id']}",
+                        use_container_width=True,
+                    ):
+                        del st.session_state[f"confirm_delete_cat_{cat['id']}"]
+                        st.rerun()
+
+    st.divider()
+    st.subheader("新規カテゴリの追加")
+    with st.form("add_category_form", clear_on_submit=True):
+        new_name = st.text_input("カテゴリ名")
+        new_icon = st.text_input("アイコン(絵文字)", value="🏷️")
+        new_seed_keywords_raw = st.text_input("シードキーワード(カンマ区切り)")
+        submitted_cat = st.form_submit_button("追加", use_container_width=True)
+        if submitted_cat:
+            if new_name:
+                seed_keywords = [k.strip() for k in new_seed_keywords_raw.split(",") if k.strip()]
+                add_category(new_name, seed_keywords, new_icon or "🏷️")
+                st.cache_data.clear()
+                st.success("追加しました")
+                st.rerun()
+            else:
+                st.warning("カテゴリ名を入力してください")

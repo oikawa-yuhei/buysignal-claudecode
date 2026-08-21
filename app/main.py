@@ -169,13 +169,21 @@ with main_tab:
                         st.caption(row["sample_context"])
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("⭕ 承認", key=f"approve_{row['id']}", use_container_width=True):
+                        if st.button(
+                            "⭕ 承認",
+                            key=f"approve_{category_id}_{row['id']}",
+                            use_container_width=True,
+                        ):
                             target_category_id = row.get("predicted_category_id") or category_id
                             approve_keyword(row, target_category_id)
                             st.cache_data.clear()
                             st.rerun()
                     with col2:
-                        if st.button("❌ 却下", key=f"reject_{row['id']}", use_container_width=True):
+                        if st.button(
+                            "❌ 却下",
+                            key=f"reject_{category_id}_{row['id']}",
+                            use_container_width=True,
+                        ):
                             reject_keyword(row)
                             st.cache_data.clear()
                             st.rerun()
@@ -199,31 +207,39 @@ with history_tab:
                         with col2:
                             if st.button(
                                 "🗑️",
-                                key=f"delete_product_btn_{product['id']}",
+                                key=f"delete_product_btn_{category_id}_{product['id']}",
                                 use_container_width=True,
                             ):
-                                st.session_state[f"confirm_delete_product_{product['id']}"] = True
+                                st.session_state[
+                                    f"confirm_delete_product_{category_id}_{product['id']}"
+                                ] = True
 
-                        if st.session_state.get(f"confirm_delete_product_{product['id']}"):
+                        if st.session_state.get(
+                            f"confirm_delete_product_{category_id}_{product['id']}"
+                        ):
                             st.warning(f"「{product['name']}」の承認を取り消しますか？")
                             confirm_col1, confirm_col2 = st.columns(2)
                             with confirm_col1:
                                 if st.button(
                                     "はい、取り消す",
-                                    key=f"confirm_delete_product_yes_{product['id']}",
+                                    key=f"confirm_delete_product_yes_{category_id}_{product['id']}",
                                     use_container_width=True,
                                 ):
                                     delete_product(product["id"])
-                                    del st.session_state[f"confirm_delete_product_{product['id']}"]
+                                    del st.session_state[
+                                        f"confirm_delete_product_{category_id}_{product['id']}"
+                                    ]
                                     st.cache_data.clear()
                                     st.rerun()
                             with confirm_col2:
                                 if st.button(
                                     "キャンセル",
-                                    key=f"confirm_delete_product_no_{product['id']}",
+                                    key=f"confirm_delete_product_no_{category_id}_{product['id']}",
                                     use_container_width=True,
                                 ):
-                                    del st.session_state[f"confirm_delete_product_{product['id']}"]
+                                    del st.session_state[
+                                        f"confirm_delete_product_{category_id}_{product['id']}"
+                                    ]
                                     st.rerun()
 
     with rejected_tab:

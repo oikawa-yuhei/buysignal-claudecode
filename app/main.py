@@ -91,8 +91,10 @@ def delete_blacklist_entry(blacklist_id):
 st.markdown(
     """
     <style>
-    .block-container {padding-top: 1rem; padding-bottom: 4rem; max-width: 480px;}
+    header[data-testid="stHeader"] {display: none;}
+    .block-container {padding-top: 1.5rem; padding-bottom: 4rem; max-width: 480px;}
     div[data-baseweb="tab-list"] {overflow-x: auto; flex-wrap: nowrap;}
+    h1 {font-size: clamp(1.3rem, 6vw, 2rem); white-space: nowrap;}
     </style>
     """,
     unsafe_allow_html=True,

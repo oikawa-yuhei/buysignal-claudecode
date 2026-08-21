@@ -52,7 +52,8 @@ create table if not exists daily_buzz_logs (
   id bigint generated always as identity primary key,
   product_id bigint not null references products(id) on delete cascade,
   logged_at date not null,
-  count integer not null default 0
+  count integer not null default 0,
+  updated_at timestamptz not null default now()
 );
 
 create unique index if not exists idx_daily_buzz_logs_product_date on daily_buzz_logs(product_id, logged_at);

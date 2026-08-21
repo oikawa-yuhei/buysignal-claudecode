@@ -45,6 +45,7 @@ def count_product_mentions(texts, products):
 
 def upsert_daily_buzz(client, counts):
     today = date.today().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     for product_id, count in counts.items():
         if count == 0:
             continue
@@ -57,12 +58,12 @@ def upsert_daily_buzz(client, counts):
         )
         if existing.data:
             row = existing.data[0]
-            client.table("daily_buzz_logs").update({"count": row["count"] + count}).eq(
-                "id", row["id"]
-            ).execute()
+            client.table("daily_buzz_logs").update(
+                {"count": row["count"] + count, "updated_at": now}
+            ).eq("id", row["id"]).execute()
         else:
             client.table("daily_buzz_logs").insert(
-                {"product_id": product_id, "logged_at": today, "count": count}
+                {"product_id": product_id, "logged_at": today, "count": count, "updated_at": now}
             ).execute()
 
 

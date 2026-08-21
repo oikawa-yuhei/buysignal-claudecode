@@ -8,7 +8,7 @@ import streamlit as st
 from src.batch import run as run_batch
 from src.config import get_client
 
-st.set_page_config(page_title="ポチポチツール", page_icon="🛒", layout="centered")
+st.set_page_config(page_title="BuySignal", page_icon="⚡", layout="centered")
 
 client = get_client()
 
@@ -107,13 +107,32 @@ st.markdown(
     header[data-testid="stHeader"] {display: none;}
     .block-container {padding-top: 1.5rem; padding-bottom: 4rem; max-width: 480px;}
     div[data-baseweb="tab-list"] {overflow-x: auto; flex-wrap: nowrap;}
-    h1 {font-size: clamp(1.3rem, 6vw, 2rem); white-space: nowrap;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("🛒 ポチポチツール")
+st.markdown(
+    """
+    <div style="text-align:center; margin-bottom: 1.2rem; line-height: 1.1;">
+        <span style="font-size: clamp(1.6rem, 8vw, 2.2rem); vertical-align: middle;">⚡</span>
+        <span style="
+            font-size: clamp(1.6rem, 8vw, 2.2rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(90deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            vertical-align: middle;
+        ">BuySignal</span>
+        <div style="font-size: 0.75rem; color: #9ca3af; letter-spacing: 0.3em; margin-top: 0.3rem;">
+            ポチポチツール
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 main_tab, history_tab, settings_tab, category_tab = st.tabs(
     ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理"]

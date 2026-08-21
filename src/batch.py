@@ -1,3 +1,4 @@
+import html
 import re
 import sys
 import unicodedata
@@ -12,6 +13,14 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from src.config import get_client
 
 UNREGISTERED_PATTERN = re.compile(r"[ァ-ヶー]{2,}\s?\d{1,4}|[A-Za-z]{2,}\s?\d{1,4}")
+URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
+HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+
+
+def strip_noise(text):
+    text = URL_PATTERN.sub(" ", text)
+    text = HTML_TAG_PATTERN.sub(" ", text)
+    return html.unescape(text)
 
 
 def normalize_text(text):
@@ -47,7 +56,7 @@ def collect_texts(sources):
         for entry in feed.entries:
             title = entry.get("title", "")
             summary = entry.get("summary", "")
-            texts.append(normalize_text(f"{title} {summary}"))
+            texts.append(normalize_text(strip_noise(f"{title} {summary}")))
     return texts
 
 

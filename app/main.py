@@ -58,6 +58,12 @@ def approve_keyword(row, category_id):
     client.table("unregistered_keywords").delete().eq("id", row["id"]).execute()
 
 
+def add_product(name, regex_pattern, category_id):
+    client.table("products").insert(
+        {"name": name, "regex_pattern": regex_pattern, "category_id": category_id}
+    ).execute()
+
+
 def reject_keyword(row):
     client.table("blacklist").insert({"keyword": row["keyword"]}).execute()
     client.table("unregistered_keywords").delete().eq("id", row["id"]).execute()
@@ -155,6 +161,29 @@ with main_tab:
         with st.expander(f"取得テキストを見る({len(st.session_state['last_run_texts'])}件)"):
             for text in st.session_state["last_run_texts"]:
                 st.markdown(f"- {text}")
+
+    with st.expander("➕ 任意のワードを直接追加"):
+        with st.form("add_product_form", clear_on_submit=True):
+            new_product_name = st.text_input("ワード")
+            product_category_options = {c["name"]: c["id"] for c in categories}
+            product_category_name = st.selectbox(
+                "カテゴリ",
+                list(product_category_options.keys()) if product_category_options else ["未分類"],
+                key="add_product_category",
+            )
+            submitted_product = st.form_submit_button("追加", use_container_width=True)
+            if submitted_product:
+                if new_product_name:
+                    add_product(
+                        new_product_name,
+                        new_product_name,
+                        product_category_options.get(product_category_name),
+                    )
+                    st.cache_data.clear()
+                    st.success("追加しました")
+                    st.rerun()
+                else:
+                    st.warning("ワードを入力してください")
 
     category_tabs = st.tabs(category_labels)
     for tab, category_id in zip(category_tabs, category_ids):

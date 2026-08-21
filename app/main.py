@@ -113,10 +113,16 @@ category_ids = [None] + [c["id"] for c in categories]
 with main_tab:
     if st.button("🔄 今すぐ巡回実行", use_container_width=True):
         with st.spinner("巡回中..."):
-            run_batch()
+            texts = run_batch()
+        st.session_state["last_run_texts"] = texts
         st.cache_data.clear()
-        st.success("巡回が完了しました")
+        st.success(f"巡回が完了しました({len(texts)}件のテキストを取得)")
         st.rerun()
+
+    if st.session_state.get("last_run_texts"):
+        with st.expander(f"取得テキストを見る({len(st.session_state['last_run_texts'])}件)"):
+            for text in st.session_state["last_run_texts"]:
+                st.markdown(f"- {text}")
 
     category_tabs = st.tabs(category_labels)
     for tab, category_id in zip(category_tabs, category_ids):
@@ -248,13 +254,20 @@ with settings_tab:
             with col3:
                 if st.button("▶", key=f"run_source_btn_{src['id']}", use_container_width=True):
                     with st.spinner(f"「{src['name']}」を巡回中..."):
-                        run_batch(source_id=src["id"])
+                        texts = run_batch(source_id=src["id"])
+                    st.session_state[f"last_run_texts_{src['id']}"] = texts
                     st.cache_data.clear()
-                    st.success("巡回が完了しました")
+                    st.success(f"巡回が完了しました({len(texts)}件のテキストを取得)")
                     st.rerun()
             with col4:
                 if st.button("🗑️", key=f"delete_btn_{src['id']}", use_container_width=True):
                     st.session_state[f"confirm_delete_{src['id']}"] = True
+
+            if st.session_state.get(f"last_run_texts_{src['id']}"):
+                run_texts = st.session_state[f"last_run_texts_{src['id']}"]
+                with st.expander(f"取得テキストを見る({len(run_texts)}件)"):
+                    for text in run_texts:
+                        st.markdown(f"- {text}")
 
             if st.session_state.get(f"confirm_delete_{src['id']}"):
                 st.warning(f"「{src['name']}」を削除しますか？この操作は取り消せません。")

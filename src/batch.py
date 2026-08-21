@@ -143,6 +143,8 @@ def run(source_id=None):
     keyword_contexts = extract_unregistered_keywords(texts, products, blacklist)
     upsert_unregistered_keywords(client, keyword_contexts, categories)
 
+    return texts
+
 
 if __name__ == "__main__":
     run()

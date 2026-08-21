@@ -15,7 +15,14 @@ client = get_client()
 
 @st.cache_data(ttl=30)
 def load_categories():
-    return client.table("categories").select("id, name, icon").order("id").execute().data or []
+    return (
+        client.table("categories")
+        .select("id, name, icon, seed_keywords")
+        .order("id")
+        .execute()
+        .data
+        or []
+    )
 
 
 @st.cache_data(ttl=15)
@@ -78,6 +85,12 @@ def add_category(name, seed_keywords, icon):
 
 def delete_category(category_id):
     client.table("categories").delete().eq("id", category_id).execute()
+
+
+def update_category_seed_keywords(category_id, seed_keywords):
+    client.table("categories").update({"seed_keywords": seed_keywords}).eq(
+        "id", category_id
+    ).execute()
 
 
 def delete_product(product_id):
@@ -323,6 +336,23 @@ with category_tab:
             with col2:
                 if st.button("🗑️", key=f"delete_cat_btn_{cat['id']}", use_container_width=True):
                     st.session_state[f"confirm_delete_cat_{cat['id']}"] = True
+
+            with st.expander("シードキーワードを編集"):
+                edited_keywords_raw = st.text_input(
+                    "シードキーワード(カンマ区切り)",
+                    value=", ".join(seed_keywords),
+                    key=f"edit_seed_keywords_{cat['id']}",
+                )
+                if st.button(
+                    "更新", key=f"update_seed_keywords_btn_{cat['id']}", use_container_width=True
+                ):
+                    new_seed_keywords = [
+                        k.strip() for k in edited_keywords_raw.split(",") if k.strip()
+                    ]
+                    update_category_seed_keywords(cat["id"], new_seed_keywords)
+                    st.cache_data.clear()
+                    st.success("更新しました")
+                    st.rerun()
 
             if st.session_state.get(f"confirm_delete_cat_{cat['id']}"):
                 st.warning(

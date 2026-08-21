@@ -126,9 +126,9 @@ st.markdown(
             -webkit-text-fill-color: transparent;
             vertical-align: middle;
         ">BuySignal</span>
-        <div style="font-size: 0.75rem; color: #9ca3af; letter-spacing: 0.3em; margin-top: 0.3rem;">
+        <span style="font-size: 0.75rem; color: #9ca3af; letter-spacing: 0.2em; margin-left: 0.6em; vertical-align: middle;">
             ポチポチツール
-        </div>
+        </span>
     </div>
     """,
     unsafe_allow_html=True,

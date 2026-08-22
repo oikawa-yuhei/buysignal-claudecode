@@ -4,6 +4,7 @@ from urllib.parse import quote_plus
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+import pandas as pd
 import streamlit as st
 
 from src.batch import build_regex_pattern, canonicalize_keyword
@@ -70,6 +71,20 @@ def load_aliases(category_id):
     if category_id is not None:
         query = query.eq("category_id", category_id)
     return query.execute().data or []
+
+
+@st.cache_data(ttl=60)
+def load_daily_buzz_logs(product_ids):
+    if not product_ids:
+        return []
+    return (
+        client.table("daily_buzz_logs")
+        .select("product_id, logged_at, count")
+        .in_("product_id", list(product_ids))
+        .execute()
+        .data
+        or []
+    )
 
 
 def product_exists(name):
@@ -245,7 +260,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-PAGES = ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理", "エイリアス管理"]
+PAGES = ["承認キュー", "推移", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理", "エイリアス管理"]
 page = st.pills(
     "ページ",
     PAGES,
@@ -379,6 +394,48 @@ if page == "承認キュー":
                                 st.cache_data.clear()
                                 st.success("修正して承認しました")
                                 st.rerun()
+
+elif page == "推移":
+    st.subheader("バズ推移(日別言及数)")
+    trend_category_tabs = st.tabs(category_labels)
+    for tab, category_id in zip(trend_category_tabs, category_ids):
+        with tab:
+            products = load_products(category_id)
+            if not products:
+                st.info("承認済みの商品はありません")
+                continue
+
+            product_ids = tuple(sorted(p["id"] for p in products))
+            logs = load_daily_buzz_logs(product_ids)
+            if not logs:
+                st.info("まだバズデータがありません")
+                continue
+
+            product_name_by_id = {p["id"]: p["name"] for p in products}
+            df = pd.DataFrame(logs)
+            df["商品"] = df["product_id"].map(product_name_by_id)
+            pivot = (
+                df.pivot_table(
+                    index="logged_at", columns="商品", values="count", aggfunc="sum"
+                )
+                .fillna(0)
+                .sort_index()
+            )
+
+            default_products = list(pivot.sum().sort_values(ascending=False).head(5).index)
+            selected = st.multiselect(
+                "表示する商品(初期値は上位5件)",
+                list(pivot.columns),
+                default=default_products,
+                key=f"trend_select_{category_id}",
+            )
+            if selected:
+                st.line_chart(pivot[selected])
+            else:
+                st.info("商品を選んでください")
+
+            with st.expander("表で見る"):
+                st.dataframe(pivot, use_container_width=True)
 
 elif page == "履歴":
     approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])

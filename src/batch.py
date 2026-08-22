@@ -50,19 +50,29 @@ URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 TRADEMARK_PATTERN = re.compile(r"[®™©]")
 
-# When text is quoted in Japanese brackets, the whole bracketed span is
-# almost always exactly the product name - a much more reliable signal
-# than guessing how many context words to allow on each side.
-BRACKET_PATTERN = re.compile(r"[「『]([^「」『』]{1,60})[」』]")
+# When text is quoted - Japanese brackets or quotation marks - the whole
+# quoted span is almost always exactly the product name, a much more
+# reliable signal than guessing how many context words to allow on each
+# side (e.g. "クラウドランナー 3 マックス" keeps its internal space).
+BRACKET_PATTERN = re.compile(
+    r"「([^「」]{1,60})」"
+    r"|『([^『』]{1,60})』"
+    r"|“([^“”]{1,60})”"
+    r"|\"([^\"]{1,60})\""
+)
 _BRACKET_CORE_CHECK = re.compile(rf"{_CORE_STD}|{_CORE_SHORT}", re.IGNORECASE)
 
 
 def extract_bracketed_candidates(text):
     candidates = []
     for match in BRACKET_PATTERN.finditer(text):
-        inner = match.group(1).strip()
-        if inner and _BRACKET_CORE_CHECK.search(inner):
-            candidates.append((inner, match.start(1), match.end(1)))
+        for i, group in enumerate(match.groups(), start=1):
+            if group is None:
+                continue
+            inner = group.strip()
+            if inner and _BRACKET_CORE_CHECK.search(inner):
+                candidates.append((inner, match.start(i), match.end(i)))
+            break
     return candidates
 
 

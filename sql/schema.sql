@@ -52,6 +52,13 @@ create table if not exists brands (
 
 create index if not exists idx_brands_category_id on brands(category_id);
 
+create table if not exists product_aliases (
+  id bigint generated always as identity primary key,
+  alias text not null unique,
+  canonical_name text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists processed_entries (
   id bigint generated always as identity primary key,
   source_id bigint not null references sources(id) on delete cascade,

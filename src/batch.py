@@ -225,8 +225,12 @@ def split_brand_prefix(keyword, brands):
     return keyword, None, None
 
 
-def extract_unregistered_keywords(texts, products, blacklist, brands=None):
+def extract_unregistered_keywords(texts, products, blacklist, brands=None, aliases=None):
     brands = brands or []
+    alias_map = {
+        canonicalize_keyword(a["alias"]): canonicalize_keyword(a["canonical_name"])
+        for a in (aliases or [])
+    }
     registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
     blacklist_set = {canonicalize_keyword(normalize_text(word)) for word in blacklist}
     brand_patterns = [pattern for pattern, _ in build_brand_patterns(brands)]
@@ -237,6 +241,7 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None):
     def consider(raw_text, text, start, end):
         raw_keyword = canonicalize_keyword(raw_text)
         keyword, brand_category_id, brand_name = split_brand_prefix(raw_keyword, brands)
+        keyword = alias_map.get(keyword, keyword)
         if keyword in blacklist_set:
             return
         if any(p.search(keyword) for p in registered_patterns):
@@ -318,13 +323,14 @@ def run(source_id=None):
         row["keyword"] for row in (client.table("blacklist").select("keyword").execute().data or [])
     ]
     brands = client.table("brands").select("name, category_id").execute().data or []
+    aliases = client.table("product_aliases").select("alias, canonical_name").execute().data or []
 
     texts = collect_texts(client, sources)
 
     counts = count_product_mentions(texts, products)
     upsert_daily_buzz(client, counts)
 
-    keyword_contexts = extract_unregistered_keywords(texts, products, blacklist, brands)
+    keyword_contexts = extract_unregistered_keywords(texts, products, blacklist, brands, aliases)
     upsert_unregistered_keywords(client, keyword_contexts, categories)
 
     return texts

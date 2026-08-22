@@ -64,6 +64,11 @@ def load_brands(category_id):
     return query.execute().data or []
 
 
+@st.cache_data(ttl=30)
+def load_aliases():
+    return client.table("product_aliases").select("*").order("alias").execute().data or []
+
+
 def product_exists(name):
     return bool(client.table("products").select("id").eq("name", name).execute().data)
 
@@ -122,6 +127,16 @@ def delete_brand(brand_id):
     client.table("brands").delete().eq("id", brand_id).execute()
 
 
+def add_alias(alias, canonical_name):
+    client.table("product_aliases").insert(
+        {"alias": alias, "canonical_name": canonical_name}
+    ).execute()
+
+
+def delete_alias(alias_id):
+    client.table("product_aliases").delete().eq("id", alias_id).execute()
+
+
 def update_category_seed_keywords(category_id, seed_keywords):
     client.table("categories").update({"seed_keywords": seed_keywords}).eq(
         "id", category_id
@@ -174,8 +189,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-main_tab, history_tab, settings_tab, category_tab, brand_tab = st.tabs(
-    ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理"]
+main_tab, history_tab, settings_tab, category_tab, brand_tab, alias_tab = st.tabs(
+    ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理", "エイリアス管理"]
 )
 
 categories = load_categories()
@@ -600,3 +615,60 @@ with brand_tab:
                             ):
                                 del st.session_state[f"confirm_delete_brand_{brand['id']}"]
                                 st.rerun()
+
+with alias_tab:
+    st.caption(
+        "カタカナ表記と英字表記など、表記ゆれで別候補になってしまう場合にここで対応付けておくと、"
+        "抽出時に「正式表記」の方へ自動的にまとめられます。"
+    )
+    st.subheader("エイリアスの追加")
+    with st.form("add_alias_form", clear_on_submit=True):
+        new_alias = st.text_input("エイリアス表記(例: ノヴァブラスト6)")
+        new_canonical = st.text_input("正式表記(例: NOVABLAST6)")
+        submitted_alias = st.form_submit_button("追加", use_container_width=True)
+        if submitted_alias:
+            if new_alias and new_canonical:
+                add_alias(canonicalize_keyword(new_alias), canonicalize_keyword(new_canonical))
+                st.cache_data.clear()
+                st.success("追加しました")
+                st.rerun()
+            else:
+                st.warning("エイリアス表記と正式表記の両方を入力してください")
+
+    st.divider()
+    st.subheader("エイリアス一覧")
+    aliases = load_aliases()
+    if not aliases:
+        st.info("エイリアスは登録されていません")
+    for alias in aliases:
+        with st.container(border=True):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**{alias['alias']}** → {alias['canonical_name']}")
+            with col2:
+                if st.button(
+                    "🗑️", key=f"delete_alias_btn_{alias['id']}", use_container_width=True
+                ):
+                    st.session_state[f"confirm_delete_alias_{alias['id']}"] = True
+
+            if st.session_state.get(f"confirm_delete_alias_{alias['id']}"):
+                st.warning(f"「{alias['alias']}」のエイリアスを削除しますか?")
+                confirm_col1, confirm_col2 = st.columns(2)
+                with confirm_col1:
+                    if st.button(
+                        "はい、削除する",
+                        key=f"confirm_delete_alias_yes_{alias['id']}",
+                        use_container_width=True,
+                    ):
+                        delete_alias(alias["id"])
+                        del st.session_state[f"confirm_delete_alias_{alias['id']}"]
+                        st.cache_data.clear()
+                        st.rerun()
+                with confirm_col2:
+                    if st.button(
+                        "キャンセル",
+                        key=f"confirm_delete_alias_no_{alias['id']}",
+                        use_container_width=True,
+                    ):
+                        del st.session_state[f"confirm_delete_alias_{alias['id']}"]
+                        st.rerun()

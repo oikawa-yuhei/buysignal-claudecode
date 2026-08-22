@@ -36,17 +36,34 @@ _SUFFIX_WORD = rf"(?:{_ACONTEXT_WORD}|{_SINGLE_LETTER_SUFFIX})"
 # (e.g. a publisher name after "「Forerunner 70」Impress Watch").
 _SEP_ENTER = r"[\s「『【]+"
 _SEP_CONTINUE = r"\s+"
-_CORE_STD = rf"{_AWORD}\s?\d{{1,4}}"
+# A digit run directly fused with a trailing capital letter, e.g. the
+# "X" in "Instinct 2X" - no separator, so it's part of the core itself.
+_CORE_STD = rf"{_AWORD}\s?\d{{1,4}}(?-i:[A-Z])?"
 _CORE_SHORT = r"[A-Za-z]\d{1,4}"
 
 UNREGISTERED_PATTERN = re.compile(
-    rf"(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{1,2}}{_CORE_SHORT}(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,2}}"
-    rf"|(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{0,1}}{_CORE_STD}(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,2}}",
+    rf"(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{1,2}}{_CORE_SHORT}(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,3}}"
+    rf"|(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{0,1}}{_CORE_STD}(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,3}}",
     re.IGNORECASE,
 )
 URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 TRADEMARK_PATTERN = re.compile(r"[®™©]")
+
+# When text is quoted in Japanese brackets, the whole bracketed span is
+# almost always exactly the product name - a much more reliable signal
+# than guessing how many context words to allow on each side.
+BRACKET_PATTERN = re.compile(r"[「『]([^「」『』]{1,60})[」』]")
+_BRACKET_CORE_CHECK = re.compile(rf"{_CORE_STD}|{_CORE_SHORT}", re.IGNORECASE)
+
+
+def extract_bracketed_candidates(text):
+    candidates = []
+    for match in BRACKET_PATTERN.finditer(text):
+        inner = match.group(1).strip()
+        if inner and _BRACKET_CORE_CHECK.search(inner):
+            candidates.append((inner, match.start(1), match.end(1)))
+    return candidates
 
 
 def build_brand_patterns(brands):
@@ -216,26 +233,32 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None):
     patterns = [UNREGISTERED_PATTERN] + brand_patterns
 
     found = {}
+
+    def consider(raw_text, text, start, end):
+        raw_keyword = canonicalize_keyword(raw_text)
+        keyword, brand_category_id, brand_name = split_brand_prefix(raw_keyword, brands)
+        if keyword in blacklist_set:
+            return
+        if any(p.search(keyword) for p in registered_patterns):
+            return
+        if keyword not in found:
+            ctx_start = max(start - 20, 0)
+            ctx_end = min(end + 20, len(text))
+            found[keyword] = {
+                "context": text[ctx_start:ctx_end],
+                "brand_category_id": brand_category_id,
+                "brand_name": brand_name,
+            }
+        elif brand_category_id is not None and found[keyword]["brand_category_id"] is None:
+            found[keyword]["brand_category_id"] = brand_category_id
+            found[keyword]["brand_name"] = brand_name
+
     for text in texts:
         for pattern in patterns:
             for match in pattern.finditer(text):
-                raw_keyword = canonicalize_keyword(match.group())
-                keyword, brand_category_id, brand_name = split_brand_prefix(raw_keyword, brands)
-                if keyword in blacklist_set:
-                    continue
-                if any(p.search(keyword) for p in registered_patterns):
-                    continue
-                if keyword not in found:
-                    start = max(match.start() - 20, 0)
-                    end = min(match.end() + 20, len(text))
-                    found[keyword] = {
-                        "context": text[start:end],
-                        "brand_category_id": brand_category_id,
-                        "brand_name": brand_name,
-                    }
-                elif brand_category_id is not None and found[keyword]["brand_category_id"] is None:
-                    found[keyword]["brand_category_id"] = brand_category_id
-                    found[keyword]["brand_name"] = brand_name
+                consider(match.group(), text, match.start(), match.end())
+        for inner, start, end in extract_bracketed_candidates(text):
+            consider(inner, text, start, end)
     return found
 
 

@@ -56,8 +56,11 @@ create table if not exists product_aliases (
   id bigint generated always as identity primary key,
   alias text not null unique,
   canonical_name text not null,
+  category_id bigint references categories(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists idx_product_aliases_category_id on product_aliases(category_id);
 
 create table if not exists processed_entries (
   id bigint generated always as identity primary key,

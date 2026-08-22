@@ -24,6 +24,12 @@ _WORD = rf"(?:[ァ-ヶー]{{2,}}|(?!{_STOPWORDS})[A-Za-z]{{2,}})"
 _AWORD = rf"\b(?>{_WORD})"
 _CONTEXT_WORD = rf"(?!{_STOPWORDS})[A-Za-z]{{2,}}"
 _ACONTEXT_WORD = rf"\b(?>{_CONTEXT_WORD})"
+# A single trailing capital letter (e.g. "Street X") isn't caught by the
+# 2+-char word classes above; only allow it as a suffix, and keep it
+# genuinely uppercase regardless of the pattern's IGNORECASE flag so it
+# doesn't degrade into matching any stray single letter.
+_SINGLE_LETTER_SUFFIX = r"(?-i:[A-Z])\b"
+_SUFFIX_WORD = rf"(?:{_ACONTEXT_WORD}|{_SINGLE_LETTER_SUFFIX})"
 # Bridges an opening bracket (e.g. "GARMIN「Forerunner") when entering a
 # match, but only ever whitespace once inside/after it - a closing
 # bracket must not let the match bleed into unrelated text that follows
@@ -34,8 +40,8 @@ _CORE_STD = rf"{_AWORD}\s?\d{{1,4}}"
 _CORE_SHORT = r"[A-Za-z]\d{1,4}"
 
 UNREGISTERED_PATTERN = re.compile(
-    rf"(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{1,2}}{_CORE_SHORT}(?:{_SEP_CONTINUE}{_ACONTEXT_WORD}){{0,2}}"
-    rf"|(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{0,1}}{_CORE_STD}(?:{_SEP_CONTINUE}{_ACONTEXT_WORD}){{0,2}}",
+    rf"(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{1,2}}{_CORE_SHORT}(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,2}}"
+    rf"|(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{0,1}}{_CORE_STD}(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,2}}",
     re.IGNORECASE,
 )
 URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
@@ -50,12 +56,13 @@ def build_brand_patterns(brands):
         continuation_word = rf"\b(?>(?!(?:{excluded})\b){_CONTEXT_WORD})"
     else:
         continuation_word = _ACONTEXT_WORD
+    continuation_suffix = rf"(?:{continuation_word}|{_SINGLE_LETTER_SUFFIX})"
 
     patterns = []
     for brand in brands:
         pattern = re.compile(
             rf"\b{re.escape(brand['name'])}\b{_SEP_ENTER}{continuation_word}"
-            rf"(?:{_SEP_CONTINUE}{continuation_word}){{0,3}}(?!{_SEP_CONTINUE}?[A-Za-z]?\d)",
+            rf"(?:{_SEP_CONTINUE}{continuation_suffix}){{0,3}}(?!{_SEP_CONTINUE}?[A-Za-z]?\d)",
             re.IGNORECASE,
         )
         patterns.append((pattern, brand.get("category_id")))

@@ -101,6 +101,24 @@ def build_brand_patterns(brands):
     return patterns
 
 
+def build_brand_core_patterns(brands):
+    """Brand directly followed by a digit-anchored model core, e.g.
+    "アシックス GT-2000". Separate from build_brand_patterns because that
+    one deliberately stops before a digit (it's for the no-digit case);
+    _CORE_STD/_CORE_SHORT already handle katakana, hyphens, etc, so this
+    just bridges the brand name (in any script) straight into them.
+    """
+    patterns = []
+    for brand in brands:
+        pattern = re.compile(
+            rf"\b{re.escape(brand['name'])}\b{_SEP_ENTER}(?:{_CORE_SHORT}|{_CORE_STD})"
+            rf"(?:{_SEP_CONTINUE}{_SUFFIX_WORD}){{0,3}}",
+            re.IGNORECASE,
+        )
+        patterns.append((pattern, brand.get("category_id")))
+    return patterns
+
+
 def strip_noise(text):
     text = URL_PATTERN.sub(" ", text)
     text = HTML_TAG_PATTERN.sub(" ", text)
@@ -330,7 +348,8 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None, alias
     registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
     blacklist_set = {canonicalize_keyword(normalize_text(word)) for word in blacklist}
     brand_patterns = [pattern for pattern, _ in build_brand_patterns(brands)]
-    patterns = [UNREGISTERED_PATTERN] + brand_patterns
+    brand_core_patterns = [pattern for pattern, _ in build_brand_core_patterns(brands)]
+    patterns = [UNREGISTERED_PATTERN] + brand_patterns + brand_core_patterns
 
     found = {}
 
@@ -338,6 +357,8 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None, alias
         raw_keyword = canonicalize_keyword(raw_text)
         keyword, brand_category_id, brand_name = split_brand_prefix(raw_keyword, brands)
         keyword = alias_map.get(keyword, keyword)
+        if brand_name is None:
+            return
         if keyword in blacklist_set:
             return
         if any(p.search(keyword) for p in registered_patterns):
@@ -350,9 +371,6 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None, alias
                 "brand_category_id": brand_category_id,
                 "brand_name": brand_name,
             }
-        elif brand_category_id is not None and found[keyword]["brand_category_id"] is None:
-            found[keyword]["brand_category_id"] = brand_category_id
-            found[keyword]["brand_name"] = brand_name
 
     for text in texts:
         for pattern in patterns:

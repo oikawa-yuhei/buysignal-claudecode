@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from urllib.parse import quote_plus
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -224,12 +225,19 @@ with main_tab:
                 st.info("未登録ワードはありません")
             for row in keywords:
                 with st.container(border=True):
-                    col1, col2, col3 = st.columns([3, 1, 1])
+                    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
                     with col1:
                         st.markdown(f"**{row['keyword']}** ({row['count']}件)")
                         if row.get("brand_name"):
                             st.caption(f"🏷️ {row['brand_name']}")
                     with col2:
+                        search_query = f"{row.get('brand_name') or ''} {row['keyword']}".strip()
+                        st.link_button(
+                            "🔍",
+                            f"https://www.google.com/search?q={quote_plus(search_query)}",
+                            use_container_width=True,
+                        )
+                    with col3:
                         if st.button(
                             "⭕",
                             key=f"approve_{category_id}_{row['id']}",
@@ -251,7 +259,7 @@ with main_tab:
                                 approve_keyword(row, target_category_id)
                                 st.cache_data.clear()
                                 st.rerun()
-                    with col3:
+                    with col4:
                         if st.button(
                             "❌",
                             key=f"reject_{category_id}_{row['id']}",

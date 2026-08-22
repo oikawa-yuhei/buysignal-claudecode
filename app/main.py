@@ -192,15 +192,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-main_tab, history_tab, settings_tab, category_tab, brand_tab, alias_tab = st.tabs(
-    ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理", "エイリアス管理"]
+PAGES = ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理", "エイリアス管理"]
+page = st.segmented_control(
+    "ページ", PAGES, default=PAGES[0], label_visibility="collapsed", key="page_nav"
 )
+if page is None:
+    page = PAGES[0]
 
 categories = load_categories()
 category_labels = ["すべて"] + [f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories]
 category_ids = [None] + [c["id"] for c in categories]
 
-with main_tab:
+if page == "承認キュー":
     if st.button("🔄 今すぐ巡回実行", use_container_width=True):
         with st.spinner("巡回中..."):
             texts = run_batch()
@@ -295,7 +298,7 @@ with main_tab:
                     if row.get("sample_context"):
                         st.caption(row["sample_context"])
 
-with history_tab:
+elif page == "履歴":
     approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])
 
     with approved_tab:
@@ -386,7 +389,7 @@ with history_tab:
                             del st.session_state[f"confirm_delete_blacklist_{entry['id']}"]
                             st.rerun()
 
-with settings_tab:
+elif page == "巡回先管理":
     st.subheader("新規巡回先の追加")
     with st.form("add_source_form", clear_on_submit=True):
         name = st.text_input("サイト名")
@@ -478,7 +481,7 @@ with settings_tab:
                                 del st.session_state[f"confirm_delete_{src['id']}"]
                                 st.rerun()
 
-with category_tab:
+elif page == "カテゴリ管理":
     st.subheader("新規カテゴリの追加")
     with st.form("add_category_form", clear_on_submit=True):
         new_name = st.text_input("カテゴリ名")
@@ -550,7 +553,7 @@ with category_tab:
                         del st.session_state[f"confirm_delete_cat_{cat['id']}"]
                         st.rerun()
 
-with brand_tab:
+elif page == "ブランド管理":
     st.caption("ここに登録したブランド名は、数字を含まない商品名(例: GARMIN Instinct Crossover)の検出と、カテゴリの自動判定に使われます。")
     st.subheader("新規ブランドの追加")
     with st.form("add_brand_form", clear_on_submit=True):
@@ -619,7 +622,7 @@ with brand_tab:
                                 del st.session_state[f"confirm_delete_brand_{brand['id']}"]
                                 st.rerun()
 
-with alias_tab:
+elif page == "エイリアス管理":
     st.caption(
         "カタカナ表記と英字表記など、表記ゆれで別候補になってしまう場合にここで対応付けておくと、"
         "抽出時に「正式表記」の方へ自動的にまとめられます。"

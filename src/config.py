@@ -23,3 +23,10 @@ SUPABASE_KEY = _get_secret("SUPABASE_KEY")
 
 def get_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def get_youtube_api_key():
+    try:
+        return _get_secret("YOUTUBE_API_KEY")
+    except KeyError:
+        return None

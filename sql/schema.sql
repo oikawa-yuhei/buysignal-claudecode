@@ -11,7 +11,9 @@ create table if not exists categories (
 create table if not exists sources (
   id bigint generated always as identity primary key,
   name text not null,
-  rss_url text not null unique,
+  source_type text not null default 'rss',
+  rss_url text unique,
+  search_query text,
   is_active boolean not null default true,
   category_id bigint references categories(id) on delete set null,
   created_at timestamptz not null default now()

@@ -106,9 +106,16 @@ def delete_source(source_id):
     client.table("sources").delete().eq("id", source_id).execute()
 
 
-def add_source(name, rss_url, category_id):
+def add_source(name, source_type, rss_url, search_query, category_id):
     client.table("sources").insert(
-        {"name": name, "rss_url": rss_url, "category_id": category_id, "is_active": True}
+        {
+            "name": name,
+            "source_type": source_type,
+            "rss_url": rss_url,
+            "search_query": search_query,
+            "category_id": category_id,
+            "is_active": True,
+        }
     ).execute()
 
 
@@ -495,22 +502,37 @@ elif page == "履歴":
 
 elif page == "巡回先管理":
     st.subheader("新規巡回先の追加")
+    new_source_type_label = st.radio(
+        "種類", ["RSS", "YouTube検索"], horizontal=True, key="new_source_type"
+    )
     with st.form("add_source_form", clear_on_submit=True):
         name = st.text_input("サイト名")
-        rss_url = st.text_input("RSS URL")
+        if new_source_type_label == "RSS":
+            rss_url = st.text_input("RSS URL")
+            search_query = None
+        else:
+            search_query = st.text_input("検索語")
+            rss_url = None
         category_options = {c["name"]: c["id"] for c in categories}
         category_name = st.selectbox(
             "デフォルトカテゴリ", list(category_options.keys()) if category_options else ["未分類"]
         )
         submitted = st.form_submit_button("追加", use_container_width=True)
         if submitted:
-            if name and rss_url:
-                add_source(name, rss_url, category_options.get(category_name))
+            if name and (rss_url or search_query):
+                add_source(
+                    name,
+                    "rss" if new_source_type_label == "RSS" else "youtube_search",
+                    rss_url,
+                    search_query,
+                    category_options.get(category_name),
+                )
                 st.cache_data.clear()
                 st.success("追加しました")
                 st.rerun()
             else:
-                st.warning("サイト名とURLを入力してください")
+                field_label = "RSS URL" if new_source_type_label == "RSS" else "検索語"
+                st.warning(f"サイト名と{field_label}を入力してください")
 
     st.divider()
     st.subheader("巡回先一覧")
@@ -525,7 +547,10 @@ elif page == "巡回先管理":
                     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                     with col1:
                         st.markdown(f"**{src['name']}**")
-                        st.caption(src["rss_url"])
+                        if src.get("source_type") == "youtube_search":
+                            st.caption(f"🔍 YouTube: {src.get('search_query')}")
+                        else:
+                            st.caption(src.get("rss_url"))
                     with col2:
                         is_active = st.toggle(
                             "ON/OFF",

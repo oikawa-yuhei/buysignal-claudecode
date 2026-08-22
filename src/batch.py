@@ -4,14 +4,17 @@ import re
 import sys
 import unicodedata
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import feedparser
+import requests
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from src.config import get_client
+from src.config import get_client, get_youtube_api_key
+
+YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 
 _STOPWORDS = (
     r"(?:VS|AND|OR|THE|FOR|ARE|HAS|HAVE|HAD|ON|TOO|IN|AT|IS|OF|TO|BY|AN|A|GOES|WITH"
@@ -125,13 +128,18 @@ def build_regex_pattern(keyword):
     return r"\s+".join(parts)
 
 
-def fetch_active_sources(client):
-    res = client.table("sources").select("id, rss_url").eq("is_active", True).execute()
-    return res.data or []
+_SOURCE_COLUMNS = "id, source_type, rss_url, search_query"
+
+
+def fetch_active_sources(client, source_types=None):
+    query = client.table("sources").select(_SOURCE_COLUMNS).eq("is_active", True)
+    if source_types:
+        query = query.in_("source_type", source_types)
+    return query.execute().data or []
 
 
 def fetch_source_by_id(client, source_id):
-    res = client.table("sources").select("id, rss_url").eq("id", source_id).execute()
+    res = client.table("sources").select(_SOURCE_COLUMNS).eq("id", source_id).execute()
     return res.data or []
 
 
@@ -159,21 +167,99 @@ def mark_entries_processed(client, source_id, entry_ids):
         client.table("processed_entries").insert(rows).execute()
 
 
+def collect_rss_texts(client, src):
+    texts = []
+    feed = feedparser.parse(src["rss_url"])
+    processed_ids = fetch_processed_entry_ids(client, src["id"])
+    new_ids = []
+    for entry in feed.entries:
+        entry_id = get_entry_id(entry)
+        if entry_id in processed_ids:
+            continue
+        title = entry.get("title", "")
+        summary = entry.get("summary", "")
+        texts.append(normalize_text(strip_noise(f"{title} {summary}")))
+        new_ids.append(entry_id)
+    mark_entries_processed(client, src["id"], new_ids)
+    return texts
+
+
+def fetch_youtube_videos(query, api_key, published_after=None):
+    params = {
+        "part": "snippet",
+        "type": "video",
+        "order": "date",
+        "relevanceLanguage": "ja",
+        "regionCode": "JP",
+        "maxResults": 50,
+        "q": query,
+        "key": api_key,
+    }
+    if published_after:
+        params["publishedAfter"] = published_after
+    response = requests.get(YOUTUBE_SEARCH_URL, params=params, timeout=15)
+    response.raise_for_status()
+    return response.json().get("items", [])
+
+
+def collect_youtube_texts(client, src):
+    api_key = get_youtube_api_key()
+    if not api_key or not src.get("search_query"):
+        return []
+
+    last_run = (
+        client.table("processed_entries")
+        .select("processed_at")
+        .eq("source_id", src["id"])
+        .order("processed_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    published_after = None
+    if last_run:
+        last_time = datetime.fromisoformat(last_run[0]["processed_at"].replace("Z", "+00:00"))
+        published_after = (last_time - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    items = fetch_youtube_videos(src["search_query"], api_key, published_after)
+    video_ids = [item["id"]["videoId"] for item in items if item.get("id", {}).get("videoId")]
+    if not video_ids:
+        return []
+
+    # Dedup across ALL youtube sources, not just this one - the same video
+    # can surface under multiple search queries and should only count once.
+    already = (
+        client.table("processed_entries").select("entry_id").in_("entry_id", video_ids).execute().data
+        or []
+    )
+    already_ids = {row["entry_id"] for row in already}
+
+    texts = []
+    new_ids = []
+    for item in items:
+        video_id = item.get("id", {}).get("videoId")
+        if not video_id or video_id in already_ids:
+            continue
+        snippet = item.get("snippet", {})
+        title = snippet.get("title", "")
+        description = snippet.get("description", "")
+        texts.append(normalize_text(strip_noise(f"{title} {description}")))
+        new_ids.append(video_id)
+
+    mark_entries_processed(client, src["id"], new_ids)
+    return texts
+
+
 def collect_texts(client, sources):
     texts = []
     for src in sources:
-        feed = feedparser.parse(src["rss_url"])
-        processed_ids = fetch_processed_entry_ids(client, src["id"])
-        new_ids = []
-        for entry in feed.entries:
-            entry_id = get_entry_id(entry)
-            if entry_id in processed_ids:
-                continue
-            title = entry.get("title", "")
-            summary = entry.get("summary", "")
-            texts.append(normalize_text(strip_noise(f"{title} {summary}")))
-            new_ids.append(entry_id)
-        mark_entries_processed(client, src["id"], new_ids)
+        try:
+            if src.get("source_type") == "youtube_search":
+                texts.extend(collect_youtube_texts(client, src))
+            else:
+                texts.extend(collect_rss_texts(client, src))
+        except Exception as e:
+            print(f"[collect_texts] source {src.get('id')} failed: {e}")
     return texts
 
 
@@ -321,10 +407,13 @@ def upsert_unregistered_keywords(client, keyword_contexts, categories):
             ).execute()
 
 
-def run(source_id=None):
+def run(source_id=None, source_types=None):
     client = get_client()
 
-    sources = fetch_source_by_id(client, source_id) if source_id is not None else fetch_active_sources(client)
+    if source_id is not None:
+        sources = fetch_source_by_id(client, source_id)
+    else:
+        sources = fetch_active_sources(client, source_types)
     products = client.table("products").select("id, regex_pattern").execute().data or []
     categories = client.table("categories").select("id, seed_keywords").execute().data or []
     blacklist = [
@@ -345,4 +434,7 @@ def run(source_id=None):
 
 
 if __name__ == "__main__":
-    run()
+    # Default to RSS-only so a plain `python src/batch.py` (and the existing
+    # hourly workflow) never burns YouTube quota unless explicitly asked.
+    cli_types = sys.argv[1].split(",") if len(sys.argv) > 1 else ["rss"]
+    run(source_types=cli_types)

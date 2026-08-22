@@ -1,8 +1,8 @@
-name: Hourly buzz collection
+name: Daily YouTube collection
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,8 +18,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run RSS batch collection
+      - name: Run YouTube batch collection
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python src/batch.py rss
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python src/batch.py youtube_search

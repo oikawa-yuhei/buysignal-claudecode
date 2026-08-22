@@ -369,6 +369,25 @@ with history_tab:
                             st.rerun()
 
 with settings_tab:
+    st.subheader("新規巡回先の追加")
+    with st.form("add_source_form", clear_on_submit=True):
+        name = st.text_input("サイト名")
+        rss_url = st.text_input("RSS URL")
+        category_options = {c["name"]: c["id"] for c in categories}
+        category_name = st.selectbox(
+            "デフォルトカテゴリ", list(category_options.keys()) if category_options else ["未分類"]
+        )
+        submitted = st.form_submit_button("追加", use_container_width=True)
+        if submitted:
+            if name and rss_url:
+                add_source(name, rss_url, category_options.get(category_name))
+                st.cache_data.clear()
+                st.success("追加しました")
+                st.rerun()
+            else:
+                st.warning("サイト名とURLを入力してください")
+
+    st.divider()
     st.subheader("巡回先一覧")
     source_category_tabs = st.tabs(category_labels)
     for tab, category_id in zip(source_category_tabs, category_ids):
@@ -440,25 +459,6 @@ with settings_tab:
                             ):
                                 del st.session_state[f"confirm_delete_{src['id']}"]
                                 st.rerun()
-
-    st.divider()
-    st.subheader("新規巡回先の追加")
-    with st.form("add_source_form", clear_on_submit=True):
-        name = st.text_input("サイト名")
-        rss_url = st.text_input("RSS URL")
-        category_options = {c["name"]: c["id"] for c in categories}
-        category_name = st.selectbox(
-            "デフォルトカテゴリ", list(category_options.keys()) if category_options else ["未分類"]
-        )
-        submitted = st.form_submit_button("追加", use_container_width=True)
-        if submitted:
-            if name and rss_url:
-                add_source(name, rss_url, category_options.get(category_name))
-                st.cache_data.clear()
-                st.success("追加しました")
-                st.rerun()
-            else:
-                st.warning("サイト名とURLを入力してください")
 
 with category_tab:
     st.subheader("新規カテゴリの追加")

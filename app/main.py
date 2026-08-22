@@ -36,8 +36,11 @@ def load_unregistered_keywords(category_id):
 
 
 @st.cache_data(ttl=30)
-def load_sources():
-    return client.table("sources").select("*").order("id").execute().data or []
+def load_sources(category_id):
+    query = client.table("sources").select("*").order("id")
+    if category_id is not None:
+        query = query.eq("category_id", category_id)
+    return query.execute().data or []
 
 
 @st.cache_data(ttl=15)
@@ -54,8 +57,11 @@ def load_blacklist():
 
 
 @st.cache_data(ttl=30)
-def load_brands():
-    return client.table("brands").select("*").order("name").execute().data or []
+def load_brands(category_id):
+    query = client.table("brands").select("*").order("name")
+    if category_id is not None:
+        query = query.eq("category_id", category_id)
+    return query.execute().data or []
 
 
 def product_exists(name):
@@ -364,63 +370,76 @@ with history_tab:
 
 with settings_tab:
     st.subheader("巡回先一覧")
-    sources = load_sources()
-    for src in sources:
-        with st.container(border=True):
-            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-            with col1:
-                st.markdown(f"**{src['name']}**")
-                st.caption(src["rss_url"])
-            with col2:
-                is_active = st.toggle(
-                    "ON/OFF",
-                    value=src["is_active"],
-                    key=f"source_toggle_{src['id']}",
-                    label_visibility="collapsed",
-                )
-                if is_active != src["is_active"]:
-                    toggle_source(src["id"], is_active)
-                    st.cache_data.clear()
-                    st.rerun()
-            with col3:
-                if st.button("▶", key=f"run_source_btn_{src['id']}", use_container_width=True):
-                    with st.spinner(f"「{src['name']}」を巡回中..."):
-                        texts = run_batch(source_id=src["id"])
-                    st.session_state[f"last_run_texts_{src['id']}"] = texts
-                    st.cache_data.clear()
-                    st.success(f"巡回が完了しました({len(texts)}件のテキストを取得)")
-                    st.rerun()
-            with col4:
-                if st.button("🗑️", key=f"delete_btn_{src['id']}", use_container_width=True):
-                    st.session_state[f"confirm_delete_{src['id']}"] = True
+    source_category_tabs = st.tabs(category_labels)
+    for tab, category_id in zip(source_category_tabs, category_ids):
+        with tab:
+            sources = load_sources(category_id)
+            if not sources:
+                st.info("巡回先はありません")
+            for src in sources:
+                with st.container(border=True):
+                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                    with col1:
+                        st.markdown(f"**{src['name']}**")
+                        st.caption(src["rss_url"])
+                    with col2:
+                        is_active = st.toggle(
+                            "ON/OFF",
+                            value=src["is_active"],
+                            key=f"source_toggle_{category_id}_{src['id']}",
+                            label_visibility="collapsed",
+                        )
+                        if is_active != src["is_active"]:
+                            toggle_source(src["id"], is_active)
+                            st.cache_data.clear()
+                            st.rerun()
+                    with col3:
+                        if st.button(
+                            "▶",
+                            key=f"run_source_btn_{category_id}_{src['id']}",
+                            use_container_width=True,
+                        ):
+                            with st.spinner(f"「{src['name']}」を巡回中..."):
+                                texts = run_batch(source_id=src["id"])
+                            st.session_state[f"last_run_texts_{src['id']}"] = texts
+                            st.cache_data.clear()
+                            st.success(f"巡回が完了しました({len(texts)}件のテキストを取得)")
+                            st.rerun()
+                    with col4:
+                        if st.button(
+                            "🗑️",
+                            key=f"delete_btn_{category_id}_{src['id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state[f"confirm_delete_{src['id']}"] = True
 
-            if st.session_state.get(f"last_run_texts_{src['id']}"):
-                run_texts = st.session_state[f"last_run_texts_{src['id']}"]
-                with st.expander(f"取得テキストを見る({len(run_texts)}件)"):
-                    for text in run_texts:
-                        st.markdown(f"- {text}")
+                    if st.session_state.get(f"last_run_texts_{src['id']}"):
+                        run_texts = st.session_state[f"last_run_texts_{src['id']}"]
+                        with st.expander(f"取得テキストを見る({len(run_texts)}件)"):
+                            for text in run_texts:
+                                st.markdown(f"- {text}")
 
-            if st.session_state.get(f"confirm_delete_{src['id']}"):
-                st.warning(f"「{src['name']}」を削除しますか？この操作は取り消せません。")
-                confirm_col1, confirm_col2 = st.columns(2)
-                with confirm_col1:
-                    if st.button(
-                        "はい、削除する",
-                        key=f"confirm_delete_yes_{src['id']}",
-                        use_container_width=True,
-                    ):
-                        delete_source(src["id"])
-                        del st.session_state[f"confirm_delete_{src['id']}"]
-                        st.cache_data.clear()
-                        st.rerun()
-                with confirm_col2:
-                    if st.button(
-                        "キャンセル",
-                        key=f"confirm_delete_no_{src['id']}",
-                        use_container_width=True,
-                    ):
-                        del st.session_state[f"confirm_delete_{src['id']}"]
-                        st.rerun()
+                    if st.session_state.get(f"confirm_delete_{src['id']}"):
+                        st.warning(f"「{src['name']}」を削除しますか？この操作は取り消せません。")
+                        confirm_col1, confirm_col2 = st.columns(2)
+                        with confirm_col1:
+                            if st.button(
+                                "はい、削除する",
+                                key=f"confirm_delete_yes_{category_id}_{src['id']}",
+                                use_container_width=True,
+                            ):
+                                delete_source(src["id"])
+                                del st.session_state[f"confirm_delete_{src['id']}"]
+                                st.cache_data.clear()
+                                st.rerun()
+                        with confirm_col2:
+                            if st.button(
+                                "キャンセル",
+                                key=f"confirm_delete_no_{category_id}_{src['id']}",
+                                use_container_width=True,
+                            ):
+                                del st.session_state[f"confirm_delete_{src['id']}"]
+                                st.rerun()
 
     st.divider()
     st.subheader("新規巡回先の追加")
@@ -519,41 +538,48 @@ with brand_tab:
     brand_category_label_by_id = {
         c["id"]: f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories
     }
-    brands = load_brands()
-    if not brands:
-        st.info("ブランドが登録されていません")
-    for brand in brands:
-        with st.container(border=True):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.markdown(f"**{brand['name']}**")
-                category_label = brand_category_label_by_id.get(brand.get("category_id"))
-                st.caption(category_label or "未分類")
-            with col2:
-                if st.button("🗑️", key=f"delete_brand_btn_{brand['id']}", use_container_width=True):
-                    st.session_state[f"confirm_delete_brand_{brand['id']}"] = True
+    brand_category_tabs = st.tabs(category_labels)
+    for tab, category_id in zip(brand_category_tabs, category_ids):
+        with tab:
+            brands = load_brands(category_id)
+            if not brands:
+                st.info("ブランドが登録されていません")
+            for brand in brands:
+                with st.container(border=True):
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"**{brand['name']}**")
+                        category_label = brand_category_label_by_id.get(brand.get("category_id"))
+                        st.caption(category_label or "未分類")
+                    with col2:
+                        if st.button(
+                            "🗑️",
+                            key=f"delete_brand_btn_{category_id}_{brand['id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state[f"confirm_delete_brand_{brand['id']}"] = True
 
-            if st.session_state.get(f"confirm_delete_brand_{brand['id']}"):
-                st.warning(f"「{brand['name']}」を削除しますか?")
-                confirm_col1, confirm_col2 = st.columns(2)
-                with confirm_col1:
-                    if st.button(
-                        "はい、削除する",
-                        key=f"confirm_delete_brand_yes_{brand['id']}",
-                        use_container_width=True,
-                    ):
-                        delete_brand(brand["id"])
-                        del st.session_state[f"confirm_delete_brand_{brand['id']}"]
-                        st.cache_data.clear()
-                        st.rerun()
-                with confirm_col2:
-                    if st.button(
-                        "キャンセル",
-                        key=f"confirm_delete_brand_no_{brand['id']}",
-                        use_container_width=True,
-                    ):
-                        del st.session_state[f"confirm_delete_brand_{brand['id']}"]
-                        st.rerun()
+                    if st.session_state.get(f"confirm_delete_brand_{brand['id']}"):
+                        st.warning(f"「{brand['name']}」を削除しますか?")
+                        confirm_col1, confirm_col2 = st.columns(2)
+                        with confirm_col1:
+                            if st.button(
+                                "はい、削除する",
+                                key=f"confirm_delete_brand_yes_{category_id}_{brand['id']}",
+                                use_container_width=True,
+                            ):
+                                delete_brand(brand["id"])
+                                del st.session_state[f"confirm_delete_brand_{brand['id']}"]
+                                st.cache_data.clear()
+                                st.rerun()
+                        with confirm_col2:
+                            if st.button(
+                                "キャンセル",
+                                key=f"confirm_delete_brand_no_{category_id}_{brand['id']}",
+                                use_container_width=True,
+                            ):
+                                del st.session_state[f"confirm_delete_brand_{brand['id']}"]
+                                st.rerun()
 
     st.divider()
     st.subheader("新規ブランドの追加")

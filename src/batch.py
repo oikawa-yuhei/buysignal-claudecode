@@ -13,18 +13,29 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.config import get_client
 
-_WORD = r"(?:[ァ-ヶー]{2,}|[A-Za-z]{2,})"
-_AWORD = rf"(?>{_WORD})"
-_CONTEXT_WORD = r"[A-Za-z]{2,}"
-_STOPWORDS = r"(?:VS|AND|OR)\b"
-_ACONTEXT_WORD = rf"(?>(?!{_STOPWORDS}){_CONTEXT_WORD})"
-_SEP = r"[\s「」『』【】]+"
+_STOPWORDS = (
+    r"(?:VS|AND|OR|THE|FOR|ARE|HAS|HAVE|HAD|ON|TOO|IN|AT|IS|OF|TO|BY|AN|A|GOES|WITH"
+    r"|THIS|THAT|THESE|THOSE|WAS|WERE|NOW|UP|ALL|NEW|OUR|YOUR|FROM|OVER|INTO|OUT"
+    r"|CAN|WILL|WHAT|WHY|HOW|WHO|BUT|NOT|YOU|WE|IT|AS|BE|DO|IF|ITS|THEIR|WHICH"
+    r"|WHEN|WHERE|MORE|MOST|SOME|ANY|EACH|EVERY|BEST|TOP|LONG|NEARLY|RARELY"
+    r"|REVIEW|BLOG|BUILT|FEATURES|MARKET|DESIGN|MODEL|YEARS|BIG)\b"
+)
+_WORD = rf"(?:[ァ-ヶー]{{2,}}|(?!{_STOPWORDS})[A-Za-z]{{2,}})"
+_AWORD = rf"\b(?>{_WORD})"
+_CONTEXT_WORD = rf"(?!{_STOPWORDS})[A-Za-z]{{2,}}"
+_ACONTEXT_WORD = rf"\b(?>{_CONTEXT_WORD})"
+# Bridges an opening bracket (e.g. "GARMIN「Forerunner") when entering a
+# match, but only ever whitespace once inside/after it - a closing
+# bracket must not let the match bleed into unrelated text that follows
+# (e.g. a publisher name after "「Forerunner 70」Impress Watch").
+_SEP_ENTER = r"[\s「『【]+"
+_SEP_CONTINUE = r"\s+"
 _CORE_STD = rf"{_AWORD}\s?\d{{1,4}}"
 _CORE_SHORT = r"[A-Za-z]\d{1,4}"
 
 UNREGISTERED_PATTERN = re.compile(
-    rf"(?:{_ACONTEXT_WORD}{_SEP}){{1,2}}{_CORE_SHORT}(?:{_SEP}{_ACONTEXT_WORD}){{0,2}}"
-    rf"|(?:{_ACONTEXT_WORD}{_SEP}){{0,1}}{_CORE_STD}(?:{_SEP}{_ACONTEXT_WORD}){{0,2}}",
+    rf"(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{1,2}}{_CORE_SHORT}(?:{_SEP_CONTINUE}{_ACONTEXT_WORD}){{0,2}}"
+    rf"|(?:{_ACONTEXT_WORD}{_SEP_ENTER}){{0,1}}{_CORE_STD}(?:{_SEP_CONTINUE}{_ACONTEXT_WORD}){{0,2}}",
     re.IGNORECASE,
 )
 URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
@@ -36,14 +47,15 @@ def build_brand_patterns(brands):
     brand_names = [b["name"] for b in brands]
     excluded = "|".join(sorted((re.escape(n) for n in brand_names), key=len, reverse=True))
     if excluded:
-        continuation_word = rf"(?>(?!(?:{excluded})\b)(?!{_STOPWORDS}){_CONTEXT_WORD})"
+        continuation_word = rf"\b(?>(?!(?:{excluded})\b){_CONTEXT_WORD})"
     else:
         continuation_word = _ACONTEXT_WORD
 
     patterns = []
     for brand in brands:
         pattern = re.compile(
-            rf"\b{re.escape(brand['name'])}\b(?:{_SEP}{continuation_word}){{1,4}}(?!{_SEP}?[A-Za-z]?\d)",
+            rf"\b{re.escape(brand['name'])}\b{_SEP_ENTER}{continuation_word}"
+            rf"(?:{_SEP_CONTINUE}{continuation_word}){{0,3}}(?!{_SEP_CONTINUE}?[A-Za-z]?\d)",
             re.IGNORECASE,
         )
         patterns.append((pattern, brand.get("category_id")))

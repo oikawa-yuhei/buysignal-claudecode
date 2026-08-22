@@ -206,9 +206,8 @@ def split_brand_prefix(keyword, brands):
     regardless of whether the brand was mentioned in a given article.
     A brand fused directly with a number (e.g. "SUUNTO9") is left as-is,
     since the number IS the product line there, not a separate model name.
-    A bare single-word remainder with no digit (e.g. "RUN") is also left
-    attached to the brand, since alone it's too generic/common a word to
-    safely regex-match on for buzz counting.
+    A resulting overly-generic remainder (e.g. a plain dictionary word) is
+    a tradeoff left to human review/blacklist rather than guessed here.
     """
     for brand in brands:
         brand_name = canonicalize_keyword(brand["name"])
@@ -216,8 +215,7 @@ def split_brand_prefix(keyword, brands):
             return keyword, brand.get("category_id"), brand["name"]
         if keyword.startswith(brand_name + " "):
             remainder = keyword[len(brand_name) :].strip()
-            is_specific_enough = " " in remainder or any(c.isdigit() for c in remainder)
-            if remainder and not remainder[0].isdigit() and is_specific_enough:
+            if remainder and not remainder[0].isdigit():
                 return remainder, brand.get("category_id"), brand["name"]
             return keyword, brand.get("category_id"), brand["name"]
         if keyword.startswith(brand_name) and keyword[len(brand_name) : len(brand_name) + 1].isdigit():

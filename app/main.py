@@ -227,6 +227,8 @@ with main_tab:
                     col1, col2, col3 = st.columns([3, 1, 1])
                     with col1:
                         st.markdown(f"**{row['keyword']}** ({row['count']}件)")
+                        if row.get("brand_name"):
+                            st.caption(f"🏷️ {row['brand_name']}")
                     with col2:
                         if st.button(
                             "⭕",

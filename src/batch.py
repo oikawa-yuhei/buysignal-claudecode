@@ -165,15 +165,15 @@ def split_brand_prefix(keyword, brands):
     for brand in brands:
         brand_name = canonicalize_keyword(brand["name"])
         if keyword == brand_name:
-            return keyword, brand.get("category_id")
+            return keyword, brand.get("category_id"), brand["name"]
         if keyword.startswith(brand_name + " "):
             remainder = keyword[len(brand_name) :].strip()
             if remainder and not remainder[0].isdigit():
-                return remainder, brand.get("category_id")
-            return keyword, brand.get("category_id")
+                return remainder, brand.get("category_id"), brand["name"]
+            return keyword, brand.get("category_id"), brand["name"]
         if keyword.startswith(brand_name) and keyword[len(brand_name) : len(brand_name) + 1].isdigit():
-            return keyword, brand.get("category_id")
-    return keyword, None
+            return keyword, brand.get("category_id"), brand["name"]
+    return keyword, None, None
 
 
 def extract_unregistered_keywords(texts, products, blacklist, brands=None):
@@ -188,7 +188,7 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None):
         for pattern in patterns:
             for match in pattern.finditer(text):
                 raw_keyword = canonicalize_keyword(match.group())
-                keyword, brand_category_id = split_brand_prefix(raw_keyword, brands)
+                keyword, brand_category_id, brand_name = split_brand_prefix(raw_keyword, brands)
                 if keyword in blacklist_set:
                     continue
                 if any(p.search(keyword) for p in registered_patterns):
@@ -199,9 +199,11 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None):
                     found[keyword] = {
                         "context": text[start:end],
                         "brand_category_id": brand_category_id,
+                        "brand_name": brand_name,
                     }
                 elif brand_category_id is not None and found[keyword]["brand_category_id"] is None:
                     found[keyword]["brand_category_id"] = brand_category_id
+                    found[keyword]["brand_name"] = brand_name
     return found
 
 
@@ -219,6 +221,7 @@ def upsert_unregistered_keywords(client, keyword_contexts, categories):
     now = datetime.now(timezone.utc).isoformat()
     for keyword, info in keyword_contexts.items():
         context = info["context"]
+        brand_name = info["brand_name"]
         predicted_category_id = predict_category(info["brand_category_id"], context, categories)
         existing = (
             client.table("unregistered_keywords")
@@ -233,6 +236,7 @@ def upsert_unregistered_keywords(client, keyword_contexts, categories):
                     "count": row["count"] + 1,
                     "sample_context": context,
                     "predicted_category_id": predicted_category_id,
+                    "brand_name": brand_name,
                     "updated_at": now,
                 }
             ).eq("id", row["id"]).execute()
@@ -241,6 +245,7 @@ def upsert_unregistered_keywords(client, keyword_contexts, categories):
                 {
                     "keyword": keyword,
                     "predicted_category_id": predicted_category_id,
+                    "brand_name": brand_name,
                     "count": 1,
                     "sample_context": context,
                     "updated_at": now,

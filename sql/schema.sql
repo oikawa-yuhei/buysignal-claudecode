@@ -34,6 +34,7 @@ create table if not exists unregistered_keywords (
   id bigint generated always as identity primary key,
   keyword text not null,
   predicted_category_id bigint references categories(id) on delete set null,
+  brand_name text,
   count integer not null default 1,
   sample_context text,
   updated_at timestamptz not null default now()

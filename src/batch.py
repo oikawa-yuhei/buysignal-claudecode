@@ -27,14 +27,15 @@ URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 
-def build_brand_pattern(brand_names):
-    if not brand_names:
-        return None
-    escaped = sorted((re.escape(b) for b in brand_names), key=len, reverse=True)
-    return re.compile(
-        rf"\b(?:{'|'.join(escaped)})\b(?:{_SEP}{_AWORD}){{1,4}}(?!{_SEP}?[A-Za-z]?\d)",
-        re.IGNORECASE,
-    )
+def build_brand_patterns(brands):
+    patterns = []
+    for brand in brands:
+        pattern = re.compile(
+            rf"\b{re.escape(brand['name'])}\b(?:{_SEP}{_AWORD}){{1,4}}(?!{_SEP}?[A-Za-z]?\d)",
+            re.IGNORECASE,
+        )
+        patterns.append((pattern, brand.get("category_id")))
+    return patterns
 
 
 def strip_noise(text):
@@ -122,8 +123,8 @@ def upsert_daily_buzz(client, counts):
 def extract_unregistered_keywords(texts, products, blacklist, brands=None):
     registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
     blacklist_set = {canonicalize_keyword(normalize_text(word)) for word in blacklist}
-    brand_pattern = build_brand_pattern(brands or [])
-    patterns = [UNREGISTERED_PATTERN] + ([brand_pattern] if brand_pattern else [])
+    brand_patterns = [pattern for pattern, _ in build_brand_patterns(brands or [])]
+    patterns = [UNREGISTERED_PATTERN] + brand_patterns
 
     found = {}
     for text in texts:
@@ -141,7 +142,17 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None):
     return found
 
 
-def predict_category(context, categories):
+def predict_category(keyword, context, categories, brands):
+    for brand in brands:
+        if brand.get("category_id") is None:
+            continue
+        brand_name = canonicalize_keyword(brand["name"])
+        if keyword == brand_name:
+            return brand["category_id"]
+        if keyword.startswith(brand_name):
+            next_char = keyword[len(brand_name) : len(brand_name) + 1]
+            if next_char == " " or next_char.isdigit():
+                return brand["category_id"]
     for category in categories:
         for seed in category.get("seed_keywords") or []:
             if seed and seed in context:
@@ -149,10 +160,10 @@ def predict_category(context, categories):
     return None
 
 
-def upsert_unregistered_keywords(client, keyword_contexts, categories):
+def upsert_unregistered_keywords(client, keyword_contexts, categories, brands):
     now = datetime.now(timezone.utc).isoformat()
     for keyword, context in keyword_contexts.items():
-        predicted_category_id = predict_category(context, categories)
+        predicted_category_id = predict_category(keyword, context, categories, brands)
         existing = (
             client.table("unregistered_keywords")
             .select("id, count")
@@ -190,7 +201,7 @@ def run(source_id=None):
     blacklist = [
         row["keyword"] for row in (client.table("blacklist").select("keyword").execute().data or [])
     ]
-    brands = [row["name"] for row in (client.table("brands").select("name").execute().data or [])]
+    brands = client.table("brands").select("name, category_id").execute().data or []
 
     texts = collect_texts(sources)
 
@@ -198,7 +209,7 @@ def run(source_id=None):
     upsert_daily_buzz(client, counts)
 
     keyword_contexts = extract_unregistered_keywords(texts, products, blacklist, brands)
-    upsert_unregistered_keywords(client, keyword_contexts, categories)
+    upsert_unregistered_keywords(client, keyword_contexts, categories, brands)
 
     return texts
 

@@ -45,8 +45,11 @@ create index if not exists idx_unregistered_keywords_predicted_category_id on un
 create table if not exists brands (
   id bigint generated always as identity primary key,
   name text not null unique,
+  category_id bigint references categories(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists idx_brands_category_id on brands(category_id);
 
 create table if not exists blacklist (
   id bigint generated always as identity primary key,

@@ -107,8 +107,8 @@ def delete_category(category_id):
     client.table("categories").delete().eq("id", category_id).execute()
 
 
-def add_brand(name):
-    client.table("brands").insert({"name": name}).execute()
+def add_brand(name, category_id):
+    client.table("brands").insert({"name": name, "category_id": category_id}).execute()
 
 
 def delete_brand(brand_id):
@@ -498,8 +498,11 @@ with category_tab:
                 st.warning("カテゴリ名を入力してください")
 
 with brand_tab:
-    st.caption("ここに登録したブランド名は、数字を含まない商品名(例: GARMIN Instinct Crossover)の検出に使われます。")
+    st.caption("ここに登録したブランド名は、数字を含まない商品名(例: GARMIN Instinct Crossover)の検出と、カテゴリの自動判定に使われます。")
     st.subheader("ブランド一覧")
+    brand_category_label_by_id = {
+        c["id"]: f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories
+    }
     brands = load_brands()
     if not brands:
         st.info("ブランドが登録されていません")
@@ -508,6 +511,8 @@ with brand_tab:
             col1, col2 = st.columns([4, 1])
             with col1:
                 st.markdown(f"**{brand['name']}**")
+                category_label = brand_category_label_by_id.get(brand.get("category_id"))
+                st.caption(category_label or "未分類")
             with col2:
                 if st.button("🗑️", key=f"delete_brand_btn_{brand['id']}", use_container_width=True):
                     st.session_state[f"confirm_delete_brand_{brand['id']}"] = True
@@ -538,10 +543,16 @@ with brand_tab:
     st.subheader("新規ブランドの追加")
     with st.form("add_brand_form", clear_on_submit=True):
         new_brand_name = st.text_input("ブランド名(英字表記)")
+        brand_category_options = {c["name"]: c["id"] for c in categories}
+        brand_category_name = st.selectbox(
+            "カテゴリ",
+            list(brand_category_options.keys()) if brand_category_options else ["未分類"],
+            key="add_brand_category",
+        )
         submitted_brand = st.form_submit_button("追加", use_container_width=True)
         if submitted_brand:
             if new_brand_name:
-                add_brand(new_brand_name.strip())
+                add_brand(new_brand_name.strip(), brand_category_options.get(brand_category_name))
                 st.cache_data.clear()
                 st.success("追加しました")
                 st.rerun()

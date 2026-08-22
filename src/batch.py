@@ -122,17 +122,40 @@ def upsert_daily_buzz(client, counts):
             ).execute()
 
 
+def split_brand_prefix(keyword, brands):
+    """If keyword starts with a known brand followed by a separate model
+    name, strip the brand so the same model is recognized as one product
+    regardless of whether the brand was mentioned in a given article.
+    A brand fused directly with a number (e.g. "SUUNTO9") is left as-is,
+    since the number IS the product line there, not a separate model name.
+    """
+    for brand in brands:
+        brand_name = canonicalize_keyword(brand["name"])
+        if keyword == brand_name:
+            return keyword, brand.get("category_id")
+        if keyword.startswith(brand_name + " "):
+            remainder = keyword[len(brand_name) :].strip()
+            if remainder and not remainder[0].isdigit():
+                return remainder, brand.get("category_id")
+            return keyword, brand.get("category_id")
+        if keyword.startswith(brand_name) and keyword[len(brand_name) : len(brand_name) + 1].isdigit():
+            return keyword, brand.get("category_id")
+    return keyword, None
+
+
 def extract_unregistered_keywords(texts, products, blacklist, brands=None):
+    brands = brands or []
     registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
     blacklist_set = {canonicalize_keyword(normalize_text(word)) for word in blacklist}
-    brand_patterns = [pattern for pattern, _ in build_brand_patterns(brands or [])]
+    brand_patterns = [pattern for pattern, _ in build_brand_patterns(brands)]
     patterns = [UNREGISTERED_PATTERN] + brand_patterns
 
     found = {}
     for text in texts:
         for pattern in patterns:
             for match in pattern.finditer(text):
-                keyword = canonicalize_keyword(match.group())
+                raw_keyword = canonicalize_keyword(match.group())
+                keyword, brand_category_id = split_brand_prefix(raw_keyword, brands)
                 if keyword in blacklist_set:
                     continue
                 if any(p.search(keyword) for p in registered_patterns):
@@ -140,21 +163,18 @@ def extract_unregistered_keywords(texts, products, blacklist, brands=None):
                 if keyword not in found:
                     start = max(match.start() - 20, 0)
                     end = min(match.end() + 20, len(text))
-                    found[keyword] = text[start:end]
+                    found[keyword] = {
+                        "context": text[start:end],
+                        "brand_category_id": brand_category_id,
+                    }
+                elif brand_category_id is not None and found[keyword]["brand_category_id"] is None:
+                    found[keyword]["brand_category_id"] = brand_category_id
     return found
 
 
-def predict_category(keyword, context, categories, brands):
-    for brand in brands:
-        if brand.get("category_id") is None:
-            continue
-        brand_name = canonicalize_keyword(brand["name"])
-        if keyword == brand_name:
-            return brand["category_id"]
-        if keyword.startswith(brand_name):
-            next_char = keyword[len(brand_name) : len(brand_name) + 1]
-            if next_char == " " or next_char.isdigit():
-                return brand["category_id"]
+def predict_category(brand_category_id, context, categories):
+    if brand_category_id is not None:
+        return brand_category_id
     for category in categories:
         for seed in category.get("seed_keywords") or []:
             if seed and seed in context:
@@ -162,10 +182,11 @@ def predict_category(keyword, context, categories, brands):
     return None
 
 
-def upsert_unregistered_keywords(client, keyword_contexts, categories, brands):
+def upsert_unregistered_keywords(client, keyword_contexts, categories):
     now = datetime.now(timezone.utc).isoformat()
-    for keyword, context in keyword_contexts.items():
-        predicted_category_id = predict_category(keyword, context, categories, brands)
+    for keyword, info in keyword_contexts.items():
+        context = info["context"]
+        predicted_category_id = predict_category(info["brand_category_id"], context, categories)
         existing = (
             client.table("unregistered_keywords")
             .select("id, count")
@@ -211,7 +232,7 @@ def run(source_id=None):
     upsert_daily_buzz(client, counts)
 
     keyword_contexts = extract_unregistered_keywords(texts, products, blacklist, brands)
-    upsert_unregistered_keywords(client, keyword_contexts, categories, brands)
+    upsert_unregistered_keywords(client, keyword_contexts, categories)
 
     return texts
 

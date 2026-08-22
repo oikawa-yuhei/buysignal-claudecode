@@ -52,6 +52,11 @@ def load_blacklist():
     return client.table("blacklist").select("*").order("created_at", desc=True).execute().data or []
 
 
+@st.cache_data(ttl=30)
+def load_brands():
+    return client.table("brands").select("*").order("name").execute().data or []
+
+
 def product_exists(name):
     return bool(client.table("products").select("id").eq("name", name).execute().data)
 
@@ -102,6 +107,14 @@ def delete_category(category_id):
     client.table("categories").delete().eq("id", category_id).execute()
 
 
+def add_brand(name):
+    client.table("brands").insert({"name": name}).execute()
+
+
+def delete_brand(brand_id):
+    client.table("brands").delete().eq("id", brand_id).execute()
+
+
 def update_category_seed_keywords(category_id, seed_keywords):
     client.table("categories").update({"seed_keywords": seed_keywords}).eq(
         "id", category_id
@@ -149,8 +162,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-main_tab, history_tab, settings_tab, category_tab = st.tabs(
-    ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理"]
+main_tab, history_tab, settings_tab, category_tab, brand_tab = st.tabs(
+    ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理"]
 )
 
 categories = load_categories()
@@ -483,3 +496,54 @@ with category_tab:
                 st.rerun()
             else:
                 st.warning("カテゴリ名を入力してください")
+
+with brand_tab:
+    st.caption("ここに登録したブランド名は、数字を含まない商品名(例: GARMIN Instinct Crossover)の検出に使われます。")
+    st.subheader("ブランド一覧")
+    brands = load_brands()
+    if not brands:
+        st.info("ブランドが登録されていません")
+    for brand in brands:
+        with st.container(border=True):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**{brand['name']}**")
+            with col2:
+                if st.button("🗑️", key=f"delete_brand_btn_{brand['id']}", use_container_width=True):
+                    st.session_state[f"confirm_delete_brand_{brand['id']}"] = True
+
+            if st.session_state.get(f"confirm_delete_brand_{brand['id']}"):
+                st.warning(f"「{brand['name']}」を削除しますか?")
+                confirm_col1, confirm_col2 = st.columns(2)
+                with confirm_col1:
+                    if st.button(
+                        "はい、削除する",
+                        key=f"confirm_delete_brand_yes_{brand['id']}",
+                        use_container_width=True,
+                    ):
+                        delete_brand(brand["id"])
+                        del st.session_state[f"confirm_delete_brand_{brand['id']}"]
+                        st.cache_data.clear()
+                        st.rerun()
+                with confirm_col2:
+                    if st.button(
+                        "キャンセル",
+                        key=f"confirm_delete_brand_no_{brand['id']}",
+                        use_container_width=True,
+                    ):
+                        del st.session_state[f"confirm_delete_brand_{brand['id']}"]
+                        st.rerun()
+
+    st.divider()
+    st.subheader("新規ブランドの追加")
+    with st.form("add_brand_form", clear_on_submit=True):
+        new_brand_name = st.text_input("ブランド名(英字表記)")
+        submitted_brand = st.form_submit_button("追加", use_container_width=True)
+        if submitted_brand:
+            if new_brand_name:
+                add_brand(new_brand_name.strip())
+                st.cache_data.clear()
+                st.success("追加しました")
+                st.rerun()
+            else:
+                st.warning("ブランド名を入力してください")

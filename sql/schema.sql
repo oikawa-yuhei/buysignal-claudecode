@@ -42,6 +42,12 @@ create table if not exists unregistered_keywords (
 create unique index if not exists idx_unregistered_keywords_keyword on unregistered_keywords(keyword);
 create index if not exists idx_unregistered_keywords_predicted_category_id on unregistered_keywords(predicted_category_id);
 
+create table if not exists brands (
+  id bigint generated always as identity primary key,
+  name text not null unique,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists blacklist (
   id bigint generated always as identity primary key,
   keyword text not null unique,

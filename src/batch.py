@@ -13,9 +13,28 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.config import get_client
 
-UNREGISTERED_PATTERN = re.compile(r"[ァ-ヶー]{2,}\s?\d{1,4}|[A-Za-z]{2,}\s?\d{1,4}")
+_WORD = r"(?:[ァ-ヶー]{2,}|[A-Za-z]{2,})"
+_AWORD = rf"(?>{_WORD})"
+_SEP = r"[\s「」『』【】]+"
+_CORE_STD = rf"{_AWORD}\s?\d{{1,4}}"
+_CORE_SHORT = r"[A-Za-z]\d{1,4}"
+
+UNREGISTERED_PATTERN = re.compile(
+    rf"(?:{_AWORD}{_SEP}){{1,2}}{_CORE_SHORT}(?:{_SEP}{_AWORD}){{0,2}}"
+    rf"|(?:{_AWORD}{_SEP}){{0,2}}{_CORE_STD}(?:{_SEP}{_AWORD}){{0,2}}"
+)
 URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+
+
+def build_brand_pattern(brand_names):
+    if not brand_names:
+        return None
+    escaped = sorted((re.escape(b) for b in brand_names), key=len, reverse=True)
+    return re.compile(
+        rf"\b(?:{'|'.join(escaped)})\b(?:{_SEP}{_AWORD}){{1,4}}(?!{_SEP}?[A-Za-z]?\d)",
+        re.IGNORECASE,
+    )
 
 
 def strip_noise(text):
@@ -29,15 +48,21 @@ def normalize_text(text):
 
 
 def canonicalize_keyword(raw_keyword):
-    return re.sub(r"\s+", "", raw_keyword).upper()
+    text = re.sub(r"[「」『』【】]", " ", raw_keyword)
+    text = re.sub(r"\s+", " ", text).strip().upper()
+    return re.sub(r"(?<=[A-Zァ-ヶー])\s+(?=\d)", "", text)
 
 
 def build_regex_pattern(keyword):
-    match = re.match(r"^(\D+)(\d+)$", keyword)
-    if match:
-        prefix, digits = match.groups()
-        return re.escape(prefix) + r"\s*" + re.escape(digits)
-    return re.escape(keyword)
+    parts = []
+    for segment in keyword.split(" "):
+        match = re.match(r"^(\D+)(\d+)$", segment)
+        if match:
+            prefix, digits = match.groups()
+            parts.append(re.escape(prefix) + r"\s*" + re.escape(digits))
+        else:
+            parts.append(re.escape(segment))
+    return r"\s+".join(parts)
 
 
 def fetch_active_sources(client):
@@ -94,22 +119,25 @@ def upsert_daily_buzz(client, counts):
             ).execute()
 
 
-def extract_unregistered_keywords(texts, products, blacklist):
+def extract_unregistered_keywords(texts, products, blacklist, brands=None):
     registered_patterns = [re.compile(p["regex_pattern"], re.IGNORECASE) for p in products]
     blacklist_set = {canonicalize_keyword(normalize_text(word)) for word in blacklist}
+    brand_pattern = build_brand_pattern(brands or [])
+    patterns = [UNREGISTERED_PATTERN] + ([brand_pattern] if brand_pattern else [])
 
     found = {}
     for text in texts:
-        for match in UNREGISTERED_PATTERN.finditer(text):
-            keyword = canonicalize_keyword(match.group())
-            if keyword in blacklist_set:
-                continue
-            if any(p.search(keyword) for p in registered_patterns):
-                continue
-            if keyword not in found:
-                start = max(match.start() - 20, 0)
-                end = min(match.end() + 20, len(text))
-                found[keyword] = text[start:end]
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                keyword = canonicalize_keyword(match.group())
+                if keyword in blacklist_set:
+                    continue
+                if any(p.search(keyword) for p in registered_patterns):
+                    continue
+                if keyword not in found:
+                    start = max(match.start() - 20, 0)
+                    end = min(match.end() + 20, len(text))
+                    found[keyword] = text[start:end]
     return found
 
 
@@ -162,13 +190,14 @@ def run(source_id=None):
     blacklist = [
         row["keyword"] for row in (client.table("blacklist").select("keyword").execute().data or [])
     ]
+    brands = [row["name"] for row in (client.table("brands").select("name").execute().data or [])]
 
     texts = collect_texts(sources)
 
     counts = count_product_mentions(texts, products)
     upsert_daily_buzz(client, counts)
 
-    keyword_contexts = extract_unregistered_keywords(texts, products, blacklist)
+    keyword_contexts = extract_unregistered_keywords(texts, products, blacklist, brands)
     upsert_unregistered_keywords(client, keyword_contexts, categories)
 
     return texts

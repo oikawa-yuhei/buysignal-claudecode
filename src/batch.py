@@ -80,14 +80,45 @@ def fetch_source_by_id(client, source_id):
     return res.data or []
 
 
-def collect_texts(sources):
+def get_entry_id(entry):
+    return entry.get("id") or entry.get("link") or entry.get("title", "")
+
+
+def fetch_processed_entry_ids(client, source_id):
+    res = (
+        client.table("processed_entries")
+        .select("entry_id")
+        .eq("source_id", source_id)
+        .execute()
+    )
+    return {row["entry_id"] for row in (res.data or [])}
+
+
+def mark_entries_processed(client, source_id, entry_ids):
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [
+        {"source_id": source_id, "entry_id": entry_id, "processed_at": now}
+        for entry_id in entry_ids
+    ]
+    if rows:
+        client.table("processed_entries").insert(rows).execute()
+
+
+def collect_texts(client, sources):
     texts = []
     for src in sources:
         feed = feedparser.parse(src["rss_url"])
+        processed_ids = fetch_processed_entry_ids(client, src["id"])
+        new_ids = []
         for entry in feed.entries:
+            entry_id = get_entry_id(entry)
+            if entry_id in processed_ids:
+                continue
             title = entry.get("title", "")
             summary = entry.get("summary", "")
             texts.append(normalize_text(strip_noise(f"{title} {summary}")))
+            new_ids.append(entry_id)
+        mark_entries_processed(client, src["id"], new_ids)
     return texts
 
 
@@ -228,7 +259,7 @@ def run(source_id=None):
     ]
     brands = client.table("brands").select("name, category_id").execute().data or []
 
-    texts = collect_texts(sources)
+    texts = collect_texts(client, sources)
 
     counts = count_product_mentions(texts, products)
     upsert_daily_buzz(client, counts)

@@ -51,6 +51,15 @@ create table if not exists brands (
 
 create index if not exists idx_brands_category_id on brands(category_id);
 
+create table if not exists processed_entries (
+  id bigint generated always as identity primary key,
+  source_id bigint not null references sources(id) on delete cascade,
+  entry_id text not null,
+  processed_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_processed_entries_source_entry on processed_entries(source_id, entry_id);
+
 create table if not exists blacklist (
   id bigint generated always as identity primary key,
   keyword text not null unique,

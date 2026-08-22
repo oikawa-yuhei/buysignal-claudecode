@@ -41,7 +41,9 @@ _SEP_ENTER = r"[\s「『【]+"
 _SEP_CONTINUE = r"\s+"
 # A digit run directly fused with a trailing capital letter, e.g. the
 # "X" in "Instinct 2X" - no separator, so it's part of the core itself.
-_CORE_STD = rf"{_AWORD}\s?\d{{1,4}}(?-i:[A-Z])?"
+# The word and digits may also be joined by a hyphen (e.g. "GT-2000"),
+# which is just as much a formatting/spacing choice as a bare space.
+_CORE_STD = rf"{_AWORD}[\s-]?\d{{1,4}}(?-i:[A-Z])?"
 _CORE_SHORT = r"[A-Za-z]\d{1,4}"
 
 UNREGISTERED_PATTERN = re.compile(
@@ -92,7 +94,7 @@ def build_brand_patterns(brands):
     for brand in brands:
         pattern = re.compile(
             rf"\b{re.escape(brand['name'])}\b{_SEP_ENTER}{continuation_word}"
-            rf"(?:{_SEP_CONTINUE}{continuation_suffix}){{0,3}}(?!{_SEP_CONTINUE}?[A-Za-z]?\d)",
+            rf"(?:{_SEP_CONTINUE}{continuation_suffix}){{0,3}}(?!(?:{_SEP_CONTINUE}|-)?[A-Za-z]?\d)",
             re.IGNORECASE,
         )
         patterns.append((pattern, brand.get("category_id")))
@@ -113,7 +115,7 @@ def normalize_text(text):
 def canonicalize_keyword(raw_keyword):
     text = re.sub(r"[「」『』【】]", " ", raw_keyword)
     text = re.sub(r"\s+", " ", text).strip().upper()
-    return re.sub(r"(?<=[A-Zァ-ヶー])\s+(?=\d)", "", text)
+    return re.sub(r"(?<=[A-Zァ-ヶー])[\s-]+(?=\d)", "", text)
 
 
 def build_regex_pattern(keyword):
@@ -122,7 +124,7 @@ def build_regex_pattern(keyword):
         match = re.match(r"^(\D+)(\d+)$", segment)
         if match:
             prefix, digits = match.groups()
-            parts.append(re.escape(prefix) + r"\s*" + re.escape(digits))
+            parts.append(re.escape(prefix) + r"[\s-]*" + re.escape(digits))
         else:
             parts.append(re.escape(segment))
     return r"\s+".join(parts)

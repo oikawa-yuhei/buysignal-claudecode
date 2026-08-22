@@ -167,13 +167,15 @@ def get_entry_id(entry):
     return entry.get("id") or entry.get("link") or entry.get("title", "")
 
 
-def fetch_processed_entry_ids(client, source_id):
-    res = (
-        client.table("processed_entries")
-        .select("entry_id")
-        .eq("source_id", source_id)
-        .execute()
-    )
+def fetch_processed_entry_ids(client, entry_ids):
+    """Which of these entry_ids have already been processed, under ANY
+    source - the same article/video can surface under multiple sources
+    (e.g. two Google News searches, or two YouTube search queries) and
+    should only ever be counted once.
+    """
+    if not entry_ids:
+        return set()
+    res = client.table("processed_entries").select("entry_id").in_("entry_id", entry_ids).execute()
     return {row["entry_id"] for row in (res.data or [])}
 
 
@@ -188,13 +190,14 @@ def mark_entries_processed(client, source_id, entry_ids):
 
 
 def collect_rss_texts(client, src):
-    texts = []
     feed = feedparser.parse(src["rss_url"])
-    processed_ids = fetch_processed_entry_ids(client, src["id"])
+    entries = [(get_entry_id(entry), entry) for entry in feed.entries]
+    already_ids = fetch_processed_entry_ids(client, [eid for eid, _ in entries])
+
+    texts = []
     new_ids = []
-    for entry in feed.entries:
-        entry_id = get_entry_id(entry)
-        if entry_id in processed_ids:
+    for entry_id, entry in entries:
+        if entry_id in already_ids:
             continue
         title = entry.get("title", "")
         summary = entry.get("summary", "")
@@ -246,13 +249,7 @@ def collect_youtube_texts(client, src):
     if not video_ids:
         return []
 
-    # Dedup across ALL youtube sources, not just this one - the same video
-    # can surface under multiple search queries and should only count once.
-    already = (
-        client.table("processed_entries").select("entry_id").in_("entry_id", video_ids).execute().data
-        or []
-    )
-    already_ids = {row["entry_id"] for row in already}
+    already_ids = fetch_processed_entry_ids(client, video_ids)
 
     texts = []
     new_ids = []

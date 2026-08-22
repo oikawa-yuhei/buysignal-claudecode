@@ -150,6 +150,51 @@ def delete_product(product_id):
     client.table("products").delete().eq("id", product_id).execute()
 
 
+def merge_products(duplicate_id, canonical_id):
+    duplicate = client.table("products").select("*").eq("id", duplicate_id).execute().data[0]
+    canonical = client.table("products").select("*").eq("id", canonical_id).execute().data[0]
+
+    dup_logs = (
+        client.table("daily_buzz_logs").select("*").eq("product_id", duplicate_id).execute().data
+        or []
+    )
+    for log in dup_logs:
+        existing = (
+            client.table("daily_buzz_logs")
+            .select("id, count")
+            .eq("product_id", canonical_id)
+            .eq("logged_at", log["logged_at"])
+            .execute()
+        )
+        if existing.data:
+            row = existing.data[0]
+            client.table("daily_buzz_logs").update({"count": row["count"] + log["count"]}).eq(
+                "id", row["id"]
+            ).execute()
+        else:
+            client.table("daily_buzz_logs").insert(
+                {
+                    "product_id": canonical_id,
+                    "logged_at": log["logged_at"],
+                    "count": log["count"],
+                }
+            ).execute()
+
+    existing_alias = (
+        client.table("product_aliases").select("id").eq("alias", duplicate["name"]).execute()
+    )
+    if not existing_alias.data:
+        client.table("product_aliases").insert(
+            {
+                "alias": duplicate["name"],
+                "canonical_name": canonical["name"],
+                "category_id": canonical.get("category_id"),
+            }
+        ).execute()
+
+    client.table("products").delete().eq("id", duplicate_id).execute()
+
+
 def delete_blacklist_entry(blacklist_id):
     client.table("blacklist").delete().eq("id", blacklist_id).execute()
 
@@ -193,11 +238,14 @@ st.markdown(
 )
 
 PAGES = ["承認キュー", "履歴", "巡回先管理", "カテゴリ管理", "ブランド管理", "エイリアス管理"]
-page = st.segmented_control(
-    "ページ", PAGES, default=PAGES[0], label_visibility="collapsed", key="page_nav"
+page = st.pills(
+    "ページ",
+    PAGES,
+    default=PAGES[0],
+    required=True,
+    label_visibility="collapsed",
+    key="page_nav",
 )
-if page is None:
-    page = PAGES[0]
 
 categories = load_categories()
 category_labels = ["すべて"] + [f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories]
@@ -302,6 +350,7 @@ elif page == "履歴":
     approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])
 
     with approved_tab:
+        all_products = load_products(None)
         approved_category_tabs = st.tabs(category_labels)
         for tab, category_id in zip(approved_category_tabs, category_ids):
             with tab:
@@ -310,11 +359,20 @@ elif page == "履歴":
                     st.info("承認済みの商品はありません")
                 for product in products:
                     with st.container(border=True):
-                        col1, col2 = st.columns([4, 1])
+                        col1, col2, col3 = st.columns([3, 1, 1])
                         with col1:
                             st.markdown(f"**{product['name']}**")
                             st.caption(product["regex_pattern"])
                         with col2:
+                            if st.button(
+                                "🔀",
+                                key=f"merge_product_btn_{category_id}_{product['id']}",
+                                use_container_width=True,
+                            ):
+                                st.session_state[
+                                    f"show_merge_product_{category_id}_{product['id']}"
+                                ] = True
+                        with col3:
                             if st.button(
                                 "🗑️",
                                 key=f"delete_product_btn_{category_id}_{product['id']}",
@@ -323,6 +381,52 @@ elif page == "履歴":
                                 st.session_state[
                                     f"confirm_delete_product_{category_id}_{product['id']}"
                                 ] = True
+
+                        if st.session_state.get(
+                            f"show_merge_product_{category_id}_{product['id']}"
+                        ):
+                            other_products = {
+                                p["name"]: p["id"]
+                                for p in all_products
+                                if p["id"] != product["id"]
+                            }
+                            if not other_products:
+                                st.info("統合先にできる他の商品がありません")
+                            else:
+                                merge_target_name = st.selectbox(
+                                    "表記ゆれで重複しているこの商品を、どちらに統合しますか?"
+                                    "(この商品は削除され、正式表記として登録されます)",
+                                    list(other_products.keys()),
+                                    key=f"merge_target_{category_id}_{product['id']}",
+                                )
+                                merge_col1, merge_col2 = st.columns(2)
+                                with merge_col1:
+                                    if st.button(
+                                        "統合する",
+                                        key=f"merge_confirm_{category_id}_{product['id']}",
+                                        use_container_width=True,
+                                    ):
+                                        merge_products(
+                                            product["id"], other_products[merge_target_name]
+                                        )
+                                        del st.session_state[
+                                            f"show_merge_product_{category_id}_{product['id']}"
+                                        ]
+                                        st.cache_data.clear()
+                                        st.success(
+                                            f"「{product['name']}」を「{merge_target_name}」に統合しました"
+                                        )
+                                        st.rerun()
+                                with merge_col2:
+                                    if st.button(
+                                        "キャンセル",
+                                        key=f"merge_cancel_{category_id}_{product['id']}",
+                                        use_container_width=True,
+                                    ):
+                                        del st.session_state[
+                                            f"show_merge_product_{category_id}_{product['id']}"
+                                        ]
+                                        st.rerun()
 
                         if st.session_state.get(
                             f"confirm_delete_product_{category_id}_{product['id']}"

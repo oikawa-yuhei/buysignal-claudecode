@@ -76,11 +76,12 @@ def product_exists(name):
     return bool(client.table("products").select("id").eq("name", name).execute().data)
 
 
-def approve_keyword(row, category_id):
+def approve_keyword(row, category_id, keyword_override=None):
+    name = canonicalize_keyword(keyword_override) if keyword_override else row["keyword"]
     client.table("products").insert(
         {
-            "name": row["keyword"],
-            "regex_pattern": build_regex_pattern(row["keyword"]),
+            "name": name,
+            "regex_pattern": build_regex_pattern(name),
             "category_id": category_id,
         }
     ).execute()
@@ -352,6 +353,32 @@ if page == "承認キュー":
                             st.rerun()
                     if row.get("sample_context"):
                         st.caption(row["sample_context"])
+
+                    with st.expander("✏️ 修正して承認"):
+                        edited_keyword = st.text_input(
+                            "ワード",
+                            value=row["keyword"],
+                            key=f"edit_keyword_{category_id}_{row['id']}",
+                        )
+                        if st.button(
+                            "この内容で承認",
+                            key=f"approve_edited_{category_id}_{row['id']}",
+                            use_container_width=True,
+                        ):
+                            if not edited_keyword.strip():
+                                st.warning("ワードを入力してください")
+                            elif product_exists(canonicalize_keyword(edited_keyword)):
+                                st.warning(
+                                    f"「{canonicalize_keyword(edited_keyword)}」はすでに登録されています"
+                                )
+                            else:
+                                target_category_id = (
+                                    row.get("predicted_category_id") or category_id
+                                )
+                                approve_keyword(row, target_category_id, edited_keyword)
+                                st.cache_data.clear()
+                                st.success("修正して承認しました")
+                                st.rerun()
 
 elif page == "履歴":
     approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])

@@ -15,13 +15,15 @@ from src.config import get_client
 
 _WORD = r"(?:[ァ-ヶー]{2,}|[A-Za-z]{2,})"
 _AWORD = rf"(?>{_WORD})"
+_CONTEXT_WORD = r"[A-Za-z]{2,}"
+_ACONTEXT_WORD = rf"(?>{_CONTEXT_WORD})"
 _SEP = r"[\s「」『』【】]+"
 _CORE_STD = rf"{_AWORD}\s?\d{{1,4}}"
 _CORE_SHORT = r"[A-Za-z]\d{1,4}"
 
 UNREGISTERED_PATTERN = re.compile(
-    rf"(?:{_AWORD}{_SEP}){{1,2}}{_CORE_SHORT}(?:{_SEP}{_AWORD}){{0,2}}"
-    rf"|(?:{_AWORD}{_SEP}){{0,2}}{_CORE_STD}(?:{_SEP}{_AWORD}){{0,2}}"
+    rf"(?:{_ACONTEXT_WORD}{_SEP}){{1,2}}{_CORE_SHORT}(?:{_SEP}{_ACONTEXT_WORD}){{0,2}}"
+    rf"|(?:{_ACONTEXT_WORD}{_SEP}){{0,2}}{_CORE_STD}(?:{_SEP}{_ACONTEXT_WORD}){{0,2}}"
 )
 URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -31,7 +33,7 @@ def build_brand_patterns(brands):
     patterns = []
     for brand in brands:
         pattern = re.compile(
-            rf"\b{re.escape(brand['name'])}\b(?:{_SEP}{_AWORD}){{1,4}}(?!{_SEP}?[A-Za-z]?\d)",
+            rf"\b{re.escape(brand['name'])}\b(?:{_SEP}{_ACONTEXT_WORD}){{1,4}}(?!{_SEP}?[A-Za-z]?\d)",
             re.IGNORECASE,
         )
         patterns.append((pattern, brand.get("category_id")))

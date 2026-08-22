@@ -27,6 +27,7 @@ UNREGISTERED_PATTERN = re.compile(
 )
 URL_PATTERN = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+TRADEMARK_PATTERN = re.compile(r"[®™©]")
 
 
 def build_brand_patterns(brands):
@@ -43,6 +44,7 @@ def build_brand_patterns(brands):
 def strip_noise(text):
     text = URL_PATTERN.sub(" ", text)
     text = HTML_TAG_PATTERN.sub(" ", text)
+    text = TRADEMARK_PATTERN.sub("", text)
     return html.unescape(text)
 
 

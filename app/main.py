@@ -461,6 +461,23 @@ with settings_tab:
                 st.warning("サイト名とURLを入力してください")
 
 with category_tab:
+    st.subheader("新規カテゴリの追加")
+    with st.form("add_category_form", clear_on_submit=True):
+        new_name = st.text_input("カテゴリ名")
+        new_icon = st.text_input("アイコン(絵文字)", value="🏷️")
+        new_seed_keywords_raw = st.text_input("シードキーワード(カンマ区切り)")
+        submitted_cat = st.form_submit_button("追加", use_container_width=True)
+        if submitted_cat:
+            if new_name:
+                seed_keywords = [k.strip() for k in new_seed_keywords_raw.split(",") if k.strip()]
+                add_category(new_name, seed_keywords, new_icon or "🏷️")
+                st.cache_data.clear()
+                st.success("追加しました")
+                st.rerun()
+            else:
+                st.warning("カテゴリ名を入力してください")
+
+    st.divider()
     st.subheader("カテゴリ一覧")
     for cat in categories:
         with st.container(border=True):
@@ -515,25 +532,28 @@ with category_tab:
                         del st.session_state[f"confirm_delete_cat_{cat['id']}"]
                         st.rerun()
 
-    st.divider()
-    st.subheader("新規カテゴリの追加")
-    with st.form("add_category_form", clear_on_submit=True):
-        new_name = st.text_input("カテゴリ名")
-        new_icon = st.text_input("アイコン(絵文字)", value="🏷️")
-        new_seed_keywords_raw = st.text_input("シードキーワード(カンマ区切り)")
-        submitted_cat = st.form_submit_button("追加", use_container_width=True)
-        if submitted_cat:
-            if new_name:
-                seed_keywords = [k.strip() for k in new_seed_keywords_raw.split(",") if k.strip()]
-                add_category(new_name, seed_keywords, new_icon or "🏷️")
+with brand_tab:
+    st.caption("ここに登録したブランド名は、数字を含まない商品名(例: GARMIN Instinct Crossover)の検出と、カテゴリの自動判定に使われます。")
+    st.subheader("新規ブランドの追加")
+    with st.form("add_brand_form", clear_on_submit=True):
+        new_brand_name = st.text_input("ブランド名(英字表記)")
+        brand_category_options = {c["name"]: c["id"] for c in categories}
+        brand_category_name = st.selectbox(
+            "カテゴリ",
+            list(brand_category_options.keys()) if brand_category_options else ["未分類"],
+            key="add_brand_category",
+        )
+        submitted_brand = st.form_submit_button("追加", use_container_width=True)
+        if submitted_brand:
+            if new_brand_name:
+                add_brand(new_brand_name.strip(), brand_category_options.get(brand_category_name))
                 st.cache_data.clear()
                 st.success("追加しました")
                 st.rerun()
             else:
-                st.warning("カテゴリ名を入力してください")
+                st.warning("ブランド名を入力してください")
 
-with brand_tab:
-    st.caption("ここに登録したブランド名は、数字を含まない商品名(例: GARMIN Instinct Crossover)の検出と、カテゴリの自動判定に使われます。")
+    st.divider()
     st.subheader("ブランド一覧")
     brand_category_label_by_id = {
         c["id"]: f'{c.get("icon") or "🏷️"} {c["name"]}' for c in categories
@@ -580,23 +600,3 @@ with brand_tab:
                             ):
                                 del st.session_state[f"confirm_delete_brand_{brand['id']}"]
                                 st.rerun()
-
-    st.divider()
-    st.subheader("新規ブランドの追加")
-    with st.form("add_brand_form", clear_on_submit=True):
-        new_brand_name = st.text_input("ブランド名(英字表記)")
-        brand_category_options = {c["name"]: c["id"] for c in categories}
-        brand_category_name = st.selectbox(
-            "カテゴリ",
-            list(brand_category_options.keys()) if brand_category_options else ["未分類"],
-            key="add_brand_category",
-        )
-        submitted_brand = st.form_submit_button("追加", use_container_width=True)
-        if submitted_brand:
-            if new_brand_name:
-                add_brand(new_brand_name.strip(), brand_category_options.get(brand_category_name))
-                st.cache_data.clear()
-                st.success("追加しました")
-                st.rerun()
-            else:
-                st.warning("ブランド名を入力してください")

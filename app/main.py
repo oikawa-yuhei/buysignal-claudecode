@@ -1,4 +1,5 @@
 import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -93,11 +94,25 @@ def product_exists(name):
 
 def approve_keyword(row, category_id, keyword_override=None):
     name = canonicalize_keyword(keyword_override) if keyword_override else row["keyword"]
-    client.table("products").insert(
+    result = (
+        client.table("products")
+        .insert(
+            {
+                "name": name,
+                "regex_pattern": build_regex_pattern(name),
+                "category_id": category_id,
+            }
+        )
+        .execute()
+    )
+    product_id = result.data[0]["id"]
+    now = datetime.now(timezone.utc).isoformat()
+    client.table("daily_buzz_logs").insert(
         {
-            "name": name,
-            "regex_pattern": build_regex_pattern(name),
-            "category_id": category_id,
+            "product_id": product_id,
+            "logged_at": date.today().isoformat(),
+            "count": row.get("count", 1),
+            "updated_at": now,
         }
     ).execute()
     client.table("unregistered_keywords").delete().eq("id", row["id"]).execute()

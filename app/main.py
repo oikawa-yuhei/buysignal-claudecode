@@ -135,6 +135,11 @@ st.markdown(
     header[data-testid="stHeader"] {display: none;}
     .block-container {padding-top: 1.5rem; padding-bottom: 4rem; max-width: 480px;}
     div[data-baseweb="tab-list"] {overflow-x: auto; flex-wrap: nowrap;}
+    div[data-testid="stVerticalBlockBorderWrapper"] {margin-bottom: 0.4rem;}
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock"] {gap: 0.25rem;}
+    div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown p {margin-bottom: 0;}
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stCaptionContainer"] p {margin-bottom: 0;}
+    div[data-testid="column"] .stButton button {padding: 0.15rem 0.4rem;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -219,13 +224,12 @@ with main_tab:
                 st.info("未登録ワードはありません")
             for row in keywords:
                 with st.container(border=True):
-                    st.markdown(f"**{row['keyword']}**  ({row['count']}件)")
-                    if row.get("sample_context"):
-                        st.caption(row["sample_context"])
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns([3, 1, 1])
                     with col1:
+                        st.markdown(f"**{row['keyword']}** ({row['count']}件)")
+                    with col2:
                         if st.button(
-                            "⭕ 承認",
+                            "⭕",
                             key=f"approve_{category_id}_{row['id']}",
                             use_container_width=True,
                         ):
@@ -245,15 +249,17 @@ with main_tab:
                                 approve_keyword(row, target_category_id)
                                 st.cache_data.clear()
                                 st.rerun()
-                    with col2:
+                    with col3:
                         if st.button(
-                            "❌ 却下",
+                            "❌",
                             key=f"reject_{category_id}_{row['id']}",
                             use_container_width=True,
                         ):
                             reject_keyword(row)
                             st.cache_data.clear()
                             st.rerun()
+                    if row.get("sample_context"):
+                        st.caption(row["sample_context"])
 
 with history_tab:
     approved_tab, rejected_tab = st.tabs(["⭕ 承認済み", "❌ 却下済み"])
